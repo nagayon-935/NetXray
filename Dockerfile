@@ -1,13 +1,19 @@
 # --- Stage 1: Build Rust WASM Engine ---
-FROM rust:1.80-slim as engine-builder
-RUN apt-get update && apt-get install -y binaryen curl && \
-    curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+FROM rust:1.80-slim AS engine-builder
+RUN apt-get update && apt-get install -y \
+    binaryen \
+    curl \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    && curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh \
+    && rustup target add wasm32-unknown-unknown
 WORKDIR /build/engine
 COPY engine/ .
 RUN wasm-pack build --target web
 
 # --- Stage 2: Build Frontend ---
-FROM node:22-slim as frontend-builder
+FROM node:22-slim AS frontend-builder
 WORKDIR /build/frontend
 COPY frontend/package*.json ./
 RUN npm install
