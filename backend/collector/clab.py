@@ -29,10 +29,8 @@ def _detect_vendor(image: str, kind: str) -> str:
         return "cisco_xr"
     if "juniper_vjunos" in kind_lower:
         return "juniper_junos"
-    if "linux" in kind_lower:
-        return "generic"
 
-    # Image-based fallback
+    # Image-based matching
     if any(k in image_lower for k in ("ceos", "arista", "eos")):
         return "arista"
     if "frr" in image_lower:
@@ -41,6 +39,10 @@ def _detect_vendor(image: str, kind: str) -> str:
         return "cisco_xr"
     if "vjunos" in image_lower:
         return "juniper_junos"
+
+    # Generic kind-based fallback
+    if "linux" in kind_lower:
+        return "generic"
 
     return "generic"
 

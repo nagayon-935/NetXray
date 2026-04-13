@@ -31,7 +31,7 @@ def test_save_and_get_topology(tmp_path, monkeypatch):
     resp = client.get("/api/topology/test-lab")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["ir_version"] == "0.1.0"
+    assert data["ir_version"] == "0.2.0"
 
 
 def test_get_nonexistent_topology(tmp_path, monkeypatch):
