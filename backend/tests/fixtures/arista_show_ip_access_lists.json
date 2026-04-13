@@ -1,0 +1,33 @@
+{
+  "aclList": [
+    {
+      "name": "ACL_SERVER_PROTECT",
+      "sequence": [
+        {
+          "sequenceNumber": 10,
+          "actionText": "permit tcp 10.0.0.0/8 any",
+          "sourceText": "10.0.0.0/8",
+          "destinationText": "any",
+          "protocolName": "tcp",
+          "destinationPortText": ""
+        },
+        {
+          "sequenceNumber": 20,
+          "actionText": "permit tcp any any",
+          "sourceText": "any",
+          "destinationText": "any",
+          "protocolName": "tcp",
+          "destinationPortText": "eq 80"
+        },
+        {
+          "sequenceNumber": 30,
+          "actionText": "deny any any any",
+          "sourceText": "any",
+          "destinationText": "any",
+          "protocolName": "any",
+          "destinationPortText": ""
+        }
+      ]
+    }
+  ]
+}

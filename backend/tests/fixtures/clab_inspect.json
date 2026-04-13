@@ -1,0 +1,18 @@
+{
+  "containers": [
+    {
+      "name": "clab-lab-router1",
+      "image": "frrouting/frr:9.1.0",
+      "kind": "linux",
+      "state": "running",
+      "ipv4_address": "172.20.0.2/24"
+    },
+    {
+      "name": "clab-lab-router2",
+      "image": "ceos:4.30.0F",
+      "kind": "ceos",
+      "state": "running",
+      "ipv4_address": "172.20.0.3/24"
+    }
+  ]
+}

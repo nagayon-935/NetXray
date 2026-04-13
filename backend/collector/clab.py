@@ -1,0 +1,80 @@
+"""containerlab inspect integration."""
+
+import json
+import logging
+import subprocess
+from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ClabNode:
+    name: str
+    mgmt_ip: str
+    vendor: str    # "frr" | "arista" | "generic"
+    state: str     # "running" | "stopped" | ...
+
+
+def _detect_vendor(image: str, kind: str) -> str:
+    image_lower = image.lower()
+    kind_lower = kind.lower()
+    if "frr" in image_lower or "frr" in kind_lower:
+        return "frr"
+    if any(k in image_lower for k in ("ceos", "arista", "eos")):
+        return "arista"
+    if "linux" in kind_lower:
+        return "generic"
+    return "generic"
+
+
+def inspect_lab(topology_file: str | None = None) -> list[ClabNode]:
+    """
+    Run `containerlab inspect --format json` and return node list.
+    topology_file: optional path to .clab.yml file
+    """
+    cmd = ["containerlab", "inspect", "--format", "json"]
+    if topology_file:
+        cmd += ["--topo", topology_file]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=True)
+        data = json.loads(result.stdout)
+    except FileNotFoundError:
+        raise RuntimeError("containerlab binary not found in PATH")
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("containerlab inspect timed out")
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f"containerlab inspect failed: {exc.stderr}")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Failed to parse containerlab inspect output: {exc}")
+
+    nodes: list[ClabNode] = []
+
+    # containerlab inspect JSON format varies slightly by version
+    # Try top-level list first, then "containers" key
+    containers = data if isinstance(data, list) else data.get("containers", [])
+
+    for container in containers:
+        name = container.get("name") or container.get("longname", "")
+        image = container.get("image", "")
+        kind = container.get("kind", "")
+        state = container.get("state", "running")
+
+        # Management IP — try multiple fields
+        mgmt_ip = (
+            container.get("ipv4_address")
+            or container.get("mgmt_ipv4_address")
+            or container.get("ip_address", "")
+        )
+        # Strip prefix length (e.g. "172.20.0.2/24" -> "172.20.0.2")
+        mgmt_ip = mgmt_ip.split("/")[0] if mgmt_ip else ""
+
+        if not mgmt_ip:
+            logger.warning("No management IP for node '%s', skipping", name)
+            continue
+
+        vendor = _detect_vendor(image, kind)
+        nodes.append(ClabNode(name=name, mgmt_ip=mgmt_ip, vendor=vendor, state=state))
+
+    return nodes

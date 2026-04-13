@@ -1,0 +1,36 @@
+{
+  "vrfs": {
+    "default": {
+      "routes": {
+        "10.0.12.0/30": {
+          "routeType": "connected",
+          "metric": 0,
+          "vias": [
+            {
+              "interface": "Ethernet1"
+            }
+          ]
+        },
+        "10.0.23.0/30": {
+          "routeType": "connected",
+          "metric": 0,
+          "vias": [
+            {
+              "interface": "Ethernet2"
+            }
+          ]
+        },
+        "1.1.1.1/32": {
+          "routeType": "eBGP",
+          "metric": 0,
+          "vias": [
+            {
+              "nexthopAddr": "10.0.12.1",
+              "interface": "Ethernet1"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

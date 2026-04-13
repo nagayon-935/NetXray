@@ -1,0 +1,23 @@
+frr version 9.1
+frr defaults traditional
+hostname R1
+log syslog informational
+!
+interface eth0
+ ip address 10.0.12.1/30
+!
+interface eth1
+ ip address 10.0.13.1/30
+ ip access-group ACL_BLOCK_SSH in
+!
+ip access-list ACL_BLOCK_SSH
+ 10 deny tcp any any eq 22
+ 20 permit any any any
+!
+ip access-list ACL_WEB_ONLY
+ 10 permit tcp 10.0.0.0/8 any eq 80
+ 20 permit tcp 10.0.0.0/8 any eq 443
+ 30 deny any any any
+!
+line vty
+!

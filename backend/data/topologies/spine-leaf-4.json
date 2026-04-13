@@ -1,0 +1,543 @@
+{
+  "ir_version": "0.1.0",
+  "topology": {
+    "nodes": [
+      {
+        "id": "spine1",
+        "type": "router",
+        "vendor": "frr",
+        "hostname": "Spine-1",
+        "interfaces": {
+          "eth1": {
+            "ip": "10.1.1.1/30",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          },
+          "eth2": {
+            "ip": "10.1.2.1/30",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          },
+          "lo": {
+            "ip": "10.255.0.1/32",
+            "state": "up",
+            "cost": 0,
+            "acl_in": null,
+            "acl_out": null
+          }
+        },
+        "vrfs": {
+          "default": {
+            "routing_table": [
+              {
+                "prefix": "192.168.1.0/24",
+                "next_hop": "10.1.1.2",
+                "protocol": "bgp",
+                "metric": 100,
+                "via_interface": "eth1"
+              },
+              {
+                "prefix": "192.168.2.0/24",
+                "next_hop": "10.1.2.2",
+                "protocol": "bgp",
+                "metric": 100,
+                "via_interface": "eth2"
+              },
+              {
+                "prefix": "10.1.1.0/30",
+                "next_hop": "0.0.0.0",
+                "protocol": "connected",
+                "metric": 0,
+                "via_interface": "eth1"
+              },
+              {
+                "prefix": "10.1.2.0/30",
+                "next_hop": "0.0.0.0",
+                "protocol": "connected",
+                "metric": 0,
+                "via_interface": "eth2"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "spine2",
+        "type": "router",
+        "vendor": "frr",
+        "hostname": "Spine-2",
+        "interfaces": {
+          "eth1": {
+            "ip": "10.2.1.1/30",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          },
+          "eth2": {
+            "ip": "10.2.2.1/30",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          },
+          "lo": {
+            "ip": "10.255.0.2/32",
+            "state": "up",
+            "cost": 0,
+            "acl_in": null,
+            "acl_out": null
+          }
+        },
+        "vrfs": {
+          "default": {
+            "routing_table": [
+              {
+                "prefix": "192.168.1.0/24",
+                "next_hop": "10.2.1.2",
+                "protocol": "bgp",
+                "metric": 100,
+                "via_interface": "eth1"
+              },
+              {
+                "prefix": "192.168.2.0/24",
+                "next_hop": "10.2.2.2",
+                "protocol": "bgp",
+                "metric": 100,
+                "via_interface": "eth2"
+              },
+              {
+                "prefix": "10.2.1.0/30",
+                "next_hop": "0.0.0.0",
+                "protocol": "connected",
+                "metric": 0,
+                "via_interface": "eth1"
+              },
+              {
+                "prefix": "10.2.2.0/30",
+                "next_hop": "0.0.0.0",
+                "protocol": "connected",
+                "metric": 0,
+                "via_interface": "eth2"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "leaf1",
+        "type": "switch",
+        "vendor": "arista",
+        "hostname": "Leaf-1",
+        "interfaces": {
+          "eth1": {
+            "ip": "10.1.1.2/30",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          },
+          "eth2": {
+            "ip": "10.2.1.2/30",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          },
+          "eth3": {
+            "ip": "192.168.1.1/24",
+            "state": "up",
+            "cost": 10,
+            "acl_in": "ACL_SERVER_PROTECT",
+            "acl_out": null
+          },
+          "eth4": {
+            "ip": "192.168.1.1/24",
+            "state": "up",
+            "cost": 10,
+            "acl_in": "ACL_SERVER_PROTECT",
+            "acl_out": null
+          },
+          "lo": {
+            "ip": "10.255.1.1/32",
+            "state": "up",
+            "cost": 0,
+            "acl_in": null,
+            "acl_out": null
+          }
+        },
+        "vrfs": {
+          "default": {
+            "routing_table": [
+              {
+                "prefix": "0.0.0.0/0",
+                "next_hop": "10.1.1.1",
+                "protocol": "bgp",
+                "metric": 100,
+                "via_interface": "eth1"
+              },
+              {
+                "prefix": "192.168.2.0/24",
+                "next_hop": "10.1.1.1",
+                "protocol": "bgp",
+                "metric": 200,
+                "via_interface": "eth1"
+              },
+              {
+                "prefix": "192.168.1.0/24",
+                "next_hop": "0.0.0.0",
+                "protocol": "connected",
+                "metric": 0,
+                "via_interface": "eth3"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "leaf2",
+        "type": "switch",
+        "vendor": "arista",
+        "hostname": "Leaf-2",
+        "interfaces": {
+          "eth1": {
+            "ip": "10.1.2.2/30",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          },
+          "eth2": {
+            "ip": "10.2.2.2/30",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          },
+          "eth3": {
+            "ip": "192.168.2.1/24",
+            "state": "up",
+            "cost": 10,
+            "acl_in": "ACL_SERVER_PROTECT",
+            "acl_out": null
+          },
+          "eth4": {
+            "ip": "192.168.2.1/24",
+            "state": "up",
+            "cost": 10,
+            "acl_in": "ACL_SERVER_PROTECT",
+            "acl_out": null
+          },
+          "lo": {
+            "ip": "10.255.1.2/32",
+            "state": "up",
+            "cost": 0,
+            "acl_in": null,
+            "acl_out": null
+          }
+        },
+        "vrfs": {
+          "default": {
+            "routing_table": [
+              {
+                "prefix": "0.0.0.0/0",
+                "next_hop": "10.1.2.1",
+                "protocol": "bgp",
+                "metric": 100,
+                "via_interface": "eth1"
+              },
+              {
+                "prefix": "192.168.1.0/24",
+                "next_hop": "10.1.2.1",
+                "protocol": "bgp",
+                "metric": 200,
+                "via_interface": "eth1"
+              },
+              {
+                "prefix": "192.168.2.0/24",
+                "next_hop": "0.0.0.0",
+                "protocol": "connected",
+                "metric": 0,
+                "via_interface": "eth3"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "host1",
+        "type": "host",
+        "vendor": "generic",
+        "hostname": "Server-1",
+        "interfaces": {
+          "eth0": {
+            "ip": "192.168.1.10/24",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          }
+        },
+        "vrfs": {
+          "default": {
+            "routing_table": [
+              {
+                "prefix": "0.0.0.0/0",
+                "next_hop": "192.168.1.1",
+                "protocol": "static",
+                "metric": 0,
+                "via_interface": "eth0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "host2",
+        "type": "host",
+        "vendor": "generic",
+        "hostname": "Server-2",
+        "interfaces": {
+          "eth0": {
+            "ip": "192.168.1.20/24",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          }
+        },
+        "vrfs": {
+          "default": {
+            "routing_table": [
+              {
+                "prefix": "0.0.0.0/0",
+                "next_hop": "192.168.1.1",
+                "protocol": "static",
+                "metric": 0,
+                "via_interface": "eth0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "host3",
+        "type": "host",
+        "vendor": "generic",
+        "hostname": "Server-3",
+        "interfaces": {
+          "eth0": {
+            "ip": "192.168.2.10/24",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          }
+        },
+        "vrfs": {
+          "default": {
+            "routing_table": [
+              {
+                "prefix": "0.0.0.0/0",
+                "next_hop": "192.168.2.1",
+                "protocol": "static",
+                "metric": 0,
+                "via_interface": "eth0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "host4",
+        "type": "host",
+        "vendor": "generic",
+        "hostname": "Server-4",
+        "interfaces": {
+          "eth0": {
+            "ip": "192.168.2.20/24",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          }
+        },
+        "vrfs": {
+          "default": {
+            "routing_table": [
+              {
+                "prefix": "0.0.0.0/0",
+                "next_hop": "192.168.2.1",
+                "protocol": "static",
+                "metric": 0,
+                "via_interface": "eth0"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "links": [
+      {
+        "id": "link-s1-l1",
+        "source": {
+          "node": "spine1",
+          "interface": "eth1"
+        },
+        "target": {
+          "node": "leaf1",
+          "interface": "eth1"
+        },
+        "state": "up"
+      },
+      {
+        "id": "link-s1-l2",
+        "source": {
+          "node": "spine1",
+          "interface": "eth2"
+        },
+        "target": {
+          "node": "leaf2",
+          "interface": "eth1"
+        },
+        "state": "up"
+      },
+      {
+        "id": "link-s2-l1",
+        "source": {
+          "node": "spine2",
+          "interface": "eth1"
+        },
+        "target": {
+          "node": "leaf1",
+          "interface": "eth2"
+        },
+        "state": "up"
+      },
+      {
+        "id": "link-s2-l2",
+        "source": {
+          "node": "spine2",
+          "interface": "eth2"
+        },
+        "target": {
+          "node": "leaf2",
+          "interface": "eth2"
+        },
+        "state": "up"
+      },
+      {
+        "id": "link-l1-h1",
+        "source": {
+          "node": "leaf1",
+          "interface": "eth3"
+        },
+        "target": {
+          "node": "host1",
+          "interface": "eth0"
+        },
+        "state": "up"
+      },
+      {
+        "id": "link-l1-h2",
+        "source": {
+          "node": "leaf1",
+          "interface": "eth4"
+        },
+        "target": {
+          "node": "host2",
+          "interface": "eth0"
+        },
+        "state": "up"
+      },
+      {
+        "id": "link-l2-h3",
+        "source": {
+          "node": "leaf2",
+          "interface": "eth3"
+        },
+        "target": {
+          "node": "host3",
+          "interface": "eth0"
+        },
+        "state": "up"
+      },
+      {
+        "id": "link-l2-h4",
+        "source": {
+          "node": "leaf2",
+          "interface": "eth4"
+        },
+        "target": {
+          "node": "host4",
+          "interface": "eth0"
+        },
+        "state": "up"
+      }
+    ]
+  },
+  "policies": {
+    "acls": {
+      "ACL_SERVER_PROTECT": [
+        {
+          "seq": 10,
+          "action": "permit",
+          "protocol": "tcp",
+          "src": "any",
+          "dst": "192.168.0.0/16",
+          "src_port": null,
+          "dst_port": 80
+        },
+        {
+          "seq": 20,
+          "action": "permit",
+          "protocol": "tcp",
+          "src": "any",
+          "dst": "192.168.0.0/16",
+          "src_port": null,
+          "dst_port": 443
+        },
+        {
+          "seq": 30,
+          "action": "permit",
+          "protocol": "icmp",
+          "src": "any",
+          "dst": "any",
+          "src_port": null,
+          "dst_port": null
+        },
+        {
+          "seq": 40,
+          "action": "permit",
+          "protocol": "tcp",
+          "src": "10.0.0.0/8",
+          "dst": "any",
+          "src_port": null,
+          "dst_port": 22
+        },
+        {
+          "seq": 50,
+          "action": "deny",
+          "protocol": "tcp",
+          "src": "any",
+          "dst": "any",
+          "src_port": null,
+          "dst_port": 22
+        },
+        {
+          "seq": 100,
+          "action": "deny",
+          "protocol": "any",
+          "src": "any",
+          "dst": "any",
+          "src_port": null,
+          "dst_port": null
+        }
+      ]
+    }
+  }
+}

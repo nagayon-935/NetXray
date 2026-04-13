@@ -1,0 +1,317 @@
+{
+  "ir_version": "0.1.0",
+  "topology": {
+    "nodes": [
+      {
+        "id": "router1",
+        "type": "router",
+        "vendor": "frr",
+        "hostname": "R1",
+        "interfaces": {
+          "eth0": {
+            "ip": "10.0.12.1/30",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          },
+          "eth1": {
+            "ip": "10.0.13.1/30",
+            "state": "up",
+            "cost": 10,
+            "acl_in": "ACL_BLOCK_SSH",
+            "acl_out": null
+          },
+          "lo": {
+            "ip": "1.1.1.1/32",
+            "state": "up",
+            "cost": 0,
+            "acl_in": null,
+            "acl_out": null
+          }
+        },
+        "vrfs": {
+          "default": {
+            "routing_table": [
+              {
+                "prefix": "10.0.23.0/30",
+                "next_hop": "10.0.12.2",
+                "protocol": "ospf",
+                "metric": 20,
+                "via_interface": "eth0"
+              },
+              {
+                "prefix": "2.2.2.2/32",
+                "next_hop": "10.0.12.2",
+                "protocol": "ospf",
+                "metric": 10,
+                "via_interface": "eth0"
+              },
+              {
+                "prefix": "3.3.3.3/32",
+                "next_hop": "10.0.13.2",
+                "protocol": "ospf",
+                "metric": 10,
+                "via_interface": "eth1"
+              },
+              {
+                "prefix": "10.0.12.0/30",
+                "next_hop": "0.0.0.0",
+                "protocol": "connected",
+                "metric": 0,
+                "via_interface": "eth0"
+              },
+              {
+                "prefix": "10.0.13.0/30",
+                "next_hop": "0.0.0.0",
+                "protocol": "connected",
+                "metric": 0,
+                "via_interface": "eth1"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "router2",
+        "type": "router",
+        "vendor": "frr",
+        "hostname": "R2",
+        "interfaces": {
+          "eth0": {
+            "ip": "10.0.12.2/30",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          },
+          "eth1": {
+            "ip": "10.0.23.1/30",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          },
+          "lo": {
+            "ip": "2.2.2.2/32",
+            "state": "up",
+            "cost": 0,
+            "acl_in": null,
+            "acl_out": null
+          }
+        },
+        "vrfs": {
+          "default": {
+            "routing_table": [
+              {
+                "prefix": "10.0.13.0/30",
+                "next_hop": "10.0.12.1",
+                "protocol": "ospf",
+                "metric": 20,
+                "via_interface": "eth0"
+              },
+              {
+                "prefix": "1.1.1.1/32",
+                "next_hop": "10.0.12.1",
+                "protocol": "ospf",
+                "metric": 10,
+                "via_interface": "eth0"
+              },
+              {
+                "prefix": "3.3.3.3/32",
+                "next_hop": "10.0.23.2",
+                "protocol": "ospf",
+                "metric": 10,
+                "via_interface": "eth1"
+              },
+              {
+                "prefix": "10.0.12.0/30",
+                "next_hop": "0.0.0.0",
+                "protocol": "connected",
+                "metric": 0,
+                "via_interface": "eth0"
+              },
+              {
+                "prefix": "10.0.23.0/30",
+                "next_hop": "0.0.0.0",
+                "protocol": "connected",
+                "metric": 0,
+                "via_interface": "eth1"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "router3",
+        "type": "router",
+        "vendor": "arista",
+        "hostname": "R3",
+        "interfaces": {
+          "eth0": {
+            "ip": "10.0.13.2/30",
+            "state": "up",
+            "cost": 10,
+            "acl_in": null,
+            "acl_out": null
+          },
+          "eth1": {
+            "ip": "10.0.23.2/30",
+            "state": "up",
+            "cost": 10,
+            "acl_in": "ACL_WEB_ONLY",
+            "acl_out": null
+          },
+          "lo": {
+            "ip": "3.3.3.3/32",
+            "state": "up",
+            "cost": 0,
+            "acl_in": null,
+            "acl_out": null
+          }
+        },
+        "vrfs": {
+          "default": {
+            "routing_table": [
+              {
+                "prefix": "10.0.12.0/30",
+                "next_hop": "10.0.13.1",
+                "protocol": "ospf",
+                "metric": 20,
+                "via_interface": "eth0"
+              },
+              {
+                "prefix": "1.1.1.1/32",
+                "next_hop": "10.0.13.1",
+                "protocol": "ospf",
+                "metric": 10,
+                "via_interface": "eth0"
+              },
+              {
+                "prefix": "2.2.2.2/32",
+                "next_hop": "10.0.23.1",
+                "protocol": "ospf",
+                "metric": 10,
+                "via_interface": "eth1"
+              },
+              {
+                "prefix": "10.0.13.0/30",
+                "next_hop": "0.0.0.0",
+                "protocol": "connected",
+                "metric": 0,
+                "via_interface": "eth0"
+              },
+              {
+                "prefix": "10.0.23.0/30",
+                "next_hop": "0.0.0.0",
+                "protocol": "connected",
+                "metric": 0,
+                "via_interface": "eth1"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "links": [
+      {
+        "id": "link-r1-r2",
+        "source": {
+          "node": "router1",
+          "interface": "eth0"
+        },
+        "target": {
+          "node": "router2",
+          "interface": "eth0"
+        },
+        "state": "up"
+      },
+      {
+        "id": "link-r1-r3",
+        "source": {
+          "node": "router1",
+          "interface": "eth1"
+        },
+        "target": {
+          "node": "router3",
+          "interface": "eth0"
+        },
+        "state": "up"
+      },
+      {
+        "id": "link-r2-r3",
+        "source": {
+          "node": "router2",
+          "interface": "eth1"
+        },
+        "target": {
+          "node": "router3",
+          "interface": "eth1"
+        },
+        "state": "up"
+      }
+    ]
+  },
+  "policies": {
+    "acls": {
+      "ACL_BLOCK_SSH": [
+        {
+          "seq": 10,
+          "action": "deny",
+          "protocol": "tcp",
+          "src": "any",
+          "dst": "any",
+          "src_port": null,
+          "dst_port": 22
+        },
+        {
+          "seq": 20,
+          "action": "permit",
+          "protocol": "any",
+          "src": "any",
+          "dst": "any",
+          "src_port": null,
+          "dst_port": null
+        }
+      ],
+      "ACL_WEB_ONLY": [
+        {
+          "seq": 10,
+          "action": "permit",
+          "protocol": "tcp",
+          "src": "any",
+          "dst": "any",
+          "src_port": null,
+          "dst_port": 80
+        },
+        {
+          "seq": 20,
+          "action": "permit",
+          "protocol": "tcp",
+          "src": "any",
+          "dst": "any",
+          "src_port": null,
+          "dst_port": 443
+        },
+        {
+          "seq": 30,
+          "action": "permit",
+          "protocol": "tcp",
+          "src": "10.0.0.0/8",
+          "dst": "any",
+          "src_port": null,
+          "dst_port": 22
+        },
+        {
+          "seq": 100,
+          "action": "deny",
+          "protocol": "any",
+          "src": "any",
+          "dst": "any",
+          "src_port": null,
+          "dst_port": null
+        }
+      ]
+    }
+  }
+}

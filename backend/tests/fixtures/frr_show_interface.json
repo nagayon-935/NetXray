@@ -1,0 +1,32 @@
+{
+  "eth0": {
+    "operstate": "up",
+    "addresses": [
+      {
+        "family": "inet",
+        "address": "10.0.12.1",
+        "prefixLength": 30
+      }
+    ]
+  },
+  "eth1": {
+    "operstate": "up",
+    "addresses": [
+      {
+        "family": "inet",
+        "address": "10.0.13.1",
+        "prefixLength": 30
+      }
+    ]
+  },
+  "lo": {
+    "operstate": "up",
+    "addresses": [
+      {
+        "family": "inet",
+        "address": "1.1.1.1",
+        "prefixLength": 32
+      }
+    ]
+  }
+}

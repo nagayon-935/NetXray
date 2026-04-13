@@ -1,0 +1,37 @@
+{
+  "interfaces": {
+    "Ethernet1": {
+      "lineProtocolStatus": "up",
+      "interfaceAddress": [
+        {
+          "primaryIp": {
+            "address": "10.0.12.2",
+            "maskLen": 30
+          }
+        }
+      ]
+    },
+    "Ethernet2": {
+      "lineProtocolStatus": "up",
+      "interfaceAddress": [
+        {
+          "primaryIp": {
+            "address": "10.0.23.1",
+            "maskLen": 30
+          }
+        }
+      ]
+    },
+    "Management0": {
+      "lineProtocolStatus": "up",
+      "interfaceAddress": [
+        {
+          "primaryIp": {
+            "address": "172.20.0.2",
+            "maskLen": 24
+          }
+        }
+      ]
+    }
+  }
+}

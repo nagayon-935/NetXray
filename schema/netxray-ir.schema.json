@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://netxray.dev/schema/ir/v0.2.0",
+  "title": "NetXray-IR",
+  "description": "NetXray Intermediate Representation for network topology and policies",
+  "type": "object",
+  "required": ["ir_version", "topology"],
+  "additionalProperties": true,
+  "properties": {
+    "ir_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of the IR schema"
+    },
+    "topology": {
+      "$ref": "#/$defs/Topology"
+    },
+    "policies": {
+      "$ref": "#/$defs/Policies"
+    }
+  },
+  "$defs": {
+    "Topology": {
+      "type": "object",
+      "required": ["nodes", "links"],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Node" }
+        },
+        "links": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Link" }
+        }
+      }
+    },
+    "Node": {
+      "type": "object",
+      "required": ["id", "type"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["router", "switch", "host"]
+        },
+        "vendor": {
+          "type": "string",
+          "enum": ["frr", "arista", "generic"],
+          "default": "generic"
+        },
+        "hostname": { "type": "string" },
+        "interfaces": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/Interface" }
+        },
+        "vrfs": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/Vrf" }
+        },
+        "bgp": { "$ref": "#/$defs/BgpConfig" },
+        "srv6": { "$ref": "#/$defs/Srv6Config" },
+        "evpn": { "$ref": "#/$defs/EvpnConfig" }
+      }
+    },
+    "Interface": {
+      "type": "object",
+      "required": ["state"],
+      "additionalProperties": true,
+      "properties": {
+        "ip": { "type": "string", "description": "CIDR notation, e.g. 10.0.0.1/30" },
+        "state": {
+          "type": "string",
+          "enum": ["up", "down"]
+        },
+        "cost": { "type": "integer", "minimum": 0, "default": 10 },
+        "acl_in": { "type": ["string", "null"], "default": null },
+        "acl_out": { "type": ["string", "null"], "default": null }
+      }
+    },
+    "Vrf": {
+      "type": "object",
+      "properties": {
+        "routing_table": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Route" }
+        }
+      }
+    },
+    "Route": {
+      "type": "object",
+      "required": ["prefix", "next_hop", "protocol"],
+      "properties": {
+        "prefix": { "type": "string", "description": "CIDR notation" },
+        "next_hop": { "type": ["string", "null"] },
+        "protocol": {
+          "type": "string",
+          "enum": ["bgp", "ospf", "connected", "static"]
+        },
+        "metric": { "type": "integer", "default": 0 },
+        "via_interface": { "type": "string" }
+      }
+    },
+    "Link": {
+      "type": "object",
+      "required": ["id", "source", "target", "state"],
+      "properties": {
+        "id": { "type": "string" },
+        "source": { "$ref": "#/$defs/LinkEndpoint" },
+        "target": { "$ref": "#/$defs/LinkEndpoint" },
+        "state": {
+          "type": "string",
+          "enum": ["up", "down"]
+        }
+      }
+    },
+    "LinkEndpoint": {
+      "type": "object",
+      "required": ["node", "interface"],
+      "properties": {
+        "node": { "type": "string" },
+        "interface": { "type": "string" }
+      }
+    },
+    "Policies": {
+      "type": "object",
+      "properties": {
+        "acls": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/AclRule" }
+          }
+        }
+      }
+    },
+    "AclRule": {
+      "type": "object",
+      "required": ["seq", "action", "protocol", "src", "dst"],
+      "properties": {
+        "seq": { "type": "integer" },
+        "action": {
+          "type": "string",
+          "enum": ["permit", "deny"]
+        },
+        "protocol": {
+          "type": "string",
+          "enum": ["tcp", "udp", "icmp", "any"]
+        },
+        "src": { "type": "string" },
+        "dst": { "type": "string" },
+        "src_port": { "type": ["integer", "null"], "default": null },
+        "dst_port": { "type": ["integer", "null"], "default": null }
+      }
+    },
+    "BgpConfig": {
+      "type": "object",
+      "description": "BGP configuration and session state for a node (IR v0.2+)",
+      "required": ["local_as", "router_id"],
+      "properties": {
+        "local_as": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "router_id": { "type": "string", "description": "IPv4 router-ID" },
+        "sessions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/BgpSession" }
+        }
+      }
+    },
+    "BgpSession": {
+      "type": "object",
+      "required": ["peer_ip", "remote_as", "state"],
+      "properties": {
+        "peer_ip": { "type": "string", "description": "Peer IP address" },
+        "peer_node": {
+          "type": ["string", "null"],
+          "description": "Resolved node ID of the peer (if known)"
+        },
+        "remote_as": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "state": {
+          "type": "string",
+          "enum": ["established", "idle", "connect", "active", "opensent", "openconfirm", "unknown"]
+        },
+        "address_families": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "e.g. ['ipv4_unicast', 'l2vpn_evpn']"
+        },
+        "role": {
+          "type": ["string", "null"],
+          "enum": ["provider", "customer", "rs", "rs-client", "peer", "undefined", null],
+          "description": "RFC 9234 BGP role (eBGP only)"
+        }
+      }
+    },
+    "Srv6Config": {
+      "type": "object",
+      "description": "SRv6 locator and SID table (IR v0.2+)",
+      "required": ["locator"],
+      "properties": {
+        "locator": { "type": "string", "description": "SRv6 locator prefix e.g. fc00:1::/48" },
+        "sids": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Srv6Sid" }
+        }
+      }
+    },
+    "Srv6Sid": {
+      "type": "object",
+      "required": ["sid", "function"],
+      "properties": {
+        "sid": { "type": "string", "description": "Full SID IPv6 address" },
+        "function": {
+          "type": "string",
+          "description": "SRv6 endpoint function e.g. End, End.DT4, End.DT6, End.X"
+        },
+        "vrf": { "type": ["string", "null"], "description": "Associated VRF name" }
+      }
+    },
+    "EvpnConfig": {
+      "type": "object",
+      "description": "EVPN/VXLAN configuration (IR v0.2+)",
+      "properties": {
+        "vtep_ip": { "type": ["string", "null"], "description": "VTEP source IP (loopback)" },
+        "vnis": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Vni" }
+        }
+      }
+    },
+    "Vni": {
+      "type": "object",
+      "required": ["vni", "type"],
+      "properties": {
+        "vni": { "type": "integer", "minimum": 1, "maximum": 16777215 },
+        "type": { "type": "string", "enum": ["L2", "L3"] },
+        "vlan": { "type": ["integer", "null"] },
+        "rd": { "type": ["string", "null"], "description": "Route distinguisher" },
+        "rt_import": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Import route targets"
+        },
+        "rt_export": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Export route targets"
+        }
+      }
+    }
+  }
+}
