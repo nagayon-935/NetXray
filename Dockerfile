@@ -12,7 +12,7 @@ WORKDIR /build/engine
 COPY engine/ .
 # Run build. We disable wasm-opt here (via --no-pack or manual flag) 
 # as it can fail in slim docker environments.
-RUN wasm-pack build --target web --release --no-typescript
+RUN wasm-pack build --target web --release
 
 # --- Stage 2: Build Frontend ---
 FROM node:22-slim AS frontend-builder
@@ -23,6 +23,7 @@ COPY frontend/ .
 # Copy WASM build files directly into src/wasm to match import paths
 COPY --from=engine-builder /build/engine/pkg/netxray_engine.js /build/frontend/src/wasm/netxray_engine.js
 COPY --from=engine-builder /build/engine/pkg/netxray_engine_bg.wasm /build/frontend/src/wasm/netxray_engine_bg.wasm
+COPY --from=engine-builder /build/engine/pkg/netxray_engine.d.ts /build/frontend/src/wasm/netxray_engine.d.ts
 RUN npm run build
 
 # --- Stage 3: Final Image (Python Backend) ---
