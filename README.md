@@ -74,6 +74,23 @@ export NETXRAY_DATA_DIR=/path/to/topologies
 
 詳細は [`backend/README.md`](backend/README.md) を参照。
 
+### Docker を使う（コンテナ実行モード）
+
+プロジェクトルートの `Dockerfile` を使用して、バックエンドとフロントエンドを統合したイメージをビルド・実行できます。
+
+```bash
+# イメージのビルド
+docker build -t netxray:latest .
+
+# コンテナの実行 (ポート 8000 を公開)
+docker run -d -p 8000:8000 --name netxray netxray:latest
+
+# http://localhost:8000 にアクセス
+```
+
+- コンテナ内では FastAPI (backend) が 8000 ポートで動作し、ビルド済みのフロントエンド資産を静的ファイルとして配信します。
+- 必要に応じて環境変数（`NETXRAY_CLAB_SSH_USER` 等）を `-e` オプションで渡してください。
+
 ## 主な機能
 
 ### トポロジ可視化
