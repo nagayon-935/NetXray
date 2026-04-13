@@ -23,7 +23,9 @@ class AristaDriver:
     def vendor_name(cls) -> str:
         return "arista"
 
-    def collect(self, host: str, credentials: dict[str, str]) -> dict[str, str]:
+    def collect(
+        self, host: str, credentials: dict[str, str], node_name: str | None = None
+    ) -> dict[str, str]:
         username = credentials.get("username", "admin")
         password = credentials.get("password", "")
         eapi_port = int(credentials.get("eapi_port", 443))

@@ -19,12 +19,29 @@ class ClabNode:
 def _detect_vendor(image: str, kind: str) -> str:
     image_lower = image.lower()
     kind_lower = kind.lower()
-    if "frr" in image_lower or "frr" in kind_lower:
-        return "frr"
-    if any(k in image_lower for k in ("ceos", "arista", "eos")):
+
+    # Kind-based matching (more reliable)
+    if any(k in kind_lower for k in ("arista_ceos", "ceos")):
         return "arista"
+    if "frr" in kind_lower:
+        return "frr"
+    if "cisco_xrd" in kind_lower:
+        return "cisco_xr"
+    if "juniper_vjunos" in kind_lower:
+        return "juniper_junos"
     if "linux" in kind_lower:
         return "generic"
+
+    # Image-based fallback
+    if any(k in image_lower for k in ("ceos", "arista", "eos")):
+        return "arista"
+    if "frr" in image_lower:
+        return "frr"
+    if "xrd" in image_lower:
+        return "cisco_xr"
+    if "vjunos" in image_lower:
+        return "juniper_junos"
+
     return "generic"
 
 
@@ -78,3 +95,28 @@ def inspect_lab(topology_file: str | None = None) -> list[ClabNode]:
         nodes.append(ClabNode(name=name, mgmt_ip=mgmt_ip, vendor=vendor, state=state))
 
     return nodes
+
+
+def exec_node(node_name: str, commands: list[str]) -> dict[str, str]:
+    """Run a list of commands inside a node using `containerlab exec`."""
+    results = {}
+    for cmd_str in commands:
+        # containerlab exec --label clab-node-name=node1 --cmd "vtysh -c '...'"
+        full_cmd = [
+            "containerlab",
+            "exec",
+            "--label",
+            f"clab-node-name={node_name}",
+            "--cmd",
+            cmd_str,
+        ]
+        try:
+            result = subprocess.run(
+                full_cmd, capture_output=True, text=True, timeout=30, check=True
+            )
+            # containerlab exec output is stdout/stderr combined
+            results[cmd_str] = result.stdout
+        except Exception as exc:
+            logger.error("Failed to exec '%s' in node %s: %s", cmd_str, node_name, exc)
+            results[cmd_str] = f"ERROR: {exc}"
+    return results

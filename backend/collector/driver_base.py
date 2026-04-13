@@ -5,6 +5,8 @@ class VendorDriver(Protocol):
     @classmethod
     def vendor_name(cls) -> str: ...
 
-    def collect(self, host: str, credentials: dict[str, str]) -> dict[str, str]:
+    def collect(
+        self, host: str, credentials: dict[str, str], node_name: str | None = None
+    ) -> dict[str, str]:
         """Run commands against host, return {command_name -> raw_output}."""
         ...

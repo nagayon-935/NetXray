@@ -29,19 +29,27 @@ class FrrDriver:
     def vendor_name(cls) -> str:
         return "frr"
 
-    def collect(self, host: str, credentials: dict[str, str]) -> dict[str, str]:
-        username = credentials.get("username", "admin")
-        password = credentials.get("password", "admin")
-        port = int(credentials.get("port", 22))
+    def collect(
+        self, host: str, credentials: dict[str, str], node_name: str | None = None
+    ) -> dict[str, str]:
+        # If node_name is present, prefer clab exec over SSH (common for clab FRR).
+        if node_name:
+            from collector.clab import exec_node
 
-        raw = ssh_client.execute_commands(
-            host=host,
-            port=port,
-            username=username,
-            password=password,
-            device_type="linux",
-            commands=_COMMANDS,
-        )
+            raw = exec_node(node_name, _COMMANDS)
+        else:
+            username = credentials.get("username", "admin")
+            password = credentials.get("password", "admin")
+            port = int(credentials.get("port", 22))
+
+            raw = ssh_client.execute_commands(
+                host=host,
+                port=port,
+                username=username,
+                password=password,
+                device_type="linux",
+                commands=_COMMANDS,
+            )
 
         # Remap keys to parser-expected names
         return {_CMD_KEY_MAP[cmd]: output for cmd, output in raw.items()}

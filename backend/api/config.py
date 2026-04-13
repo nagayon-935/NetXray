@@ -19,6 +19,16 @@ class Settings(BaseSettings):
     arista_eapi_port: int = 443
     schema_path: Path = Path(__file__).parent.parent.parent / "schema" / "netxray-ir.schema.json"
 
+    # Default credentials for common containerlab kinds.
+    # Used if no specific credentials are provided in the collection request.
+    clab_default_creds: dict[str, dict[str, str]] = {
+        "arista": {"username": "admin", "password": "admin"},
+        "frr": {"username": "root", "password": "frr"},
+        "cisco_xr": {"username": "clab", "password": "clab@123"},
+        "juniper_junos": {"username": "admin", "password": "admin@123"},
+        "generic": {"username": "admin", "password": "admin"},
+    }
+
 
 settings = Settings()
 

@@ -23,11 +23,6 @@ def collect_topology(req: CollectRequest) -> dict:
         from translator.ir_builder import build_ir
         from translator.parsers import PARSER_REGISTRY
 
-        creds = req.credentials or {
-            "username": settings.clab_ssh_user,
-            "password": settings.clab_ssh_password,
-        }
-
         nodes = inspect_lab(req.clab_topology)
         if not nodes:
             raise HTTPException(status_code=500, detail="No nodes found in containerlab topology")
@@ -40,9 +35,24 @@ def collect_topology(req: CollectRequest) -> dict:
             if driver_cls is None:
                 logger.warning("No driver for vendor '%s' (node %s), skipping", vendor, node.name)
                 continue
+
+            # Determine credentials: 
+            # 1. Use credentials from request if provided.
+            # 2. Use vendor-specific default if available in settings.
+            # 3. Fallback to general clab settings.
+            if req.credentials:
+                node_creds = req.credentials
+            else:
+                node_creds = settings.clab_default_creds.get(vendor, {
+                    "username": settings.clab_ssh_user,
+                    "password": settings.clab_ssh_password,
+                })
+
             try:
                 driver = driver_cls()
-                driver_outputs[node.name] = driver.collect(node.mgmt_ip, creds)
+                driver_outputs[node.name] = driver.collect(
+                    node.mgmt_ip, node_creds, node_name=node.name
+                )
             except Exception as exc:
                 logger.warning("Failed to collect from %s: %s", node.name, exc)
                 errors.append(f"{node.name}: {exc}")
