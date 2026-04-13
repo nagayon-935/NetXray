@@ -1,5 +1,5 @@
 # --- Stage 1: Build Rust WASM Engine ---
-FROM rust:1.80-slim AS engine-builder
+FROM rust:1.85-slim AS engine-builder
 RUN apt-get update && apt-get install -y \
     binaryen \
     curl \
