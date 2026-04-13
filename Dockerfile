@@ -20,8 +20,9 @@ WORKDIR /build/frontend
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ .
-# Copy WASM build from previous stage
-COPY --from=engine-builder /build/engine/pkg /build/frontend/src/wasm/pkg
+# Copy WASM build files directly into src/wasm to match import paths
+COPY --from=engine-builder /build/engine/pkg/netxray_engine.js /build/frontend/src/wasm/netxray_engine.js
+COPY --from=engine-builder /build/engine/pkg/netxray_engine_bg.wasm /build/frontend/src/wasm/netxray_engine_bg.wasm
 RUN npm run build
 
 # --- Stage 3: Final Image (Python Backend) ---
