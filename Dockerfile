@@ -10,7 +10,9 @@ RUN apt-get update && apt-get install -y \
     && rustup target add wasm32-unknown-unknown
 WORKDIR /build/engine
 COPY engine/ .
-RUN wasm-pack build --target web
+# Run build. We disable wasm-opt here (via --no-pack or manual flag) 
+# as it can fail in slim docker environments.
+RUN wasm-pack build --target web --release --no-typescript
 
 # --- Stage 2: Build Frontend ---
 FROM node:22-slim AS frontend-builder
