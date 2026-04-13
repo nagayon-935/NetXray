@@ -1,4 +1,4 @@
-from translator.parsers.arista import AristaParser
+from plugins.arista.parser import AristaParser
 
 
 def test_parse_interfaces(arista_outputs):

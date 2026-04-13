@@ -1,5 +1,5 @@
-from translator.parsers.frr import FrrParser
-from translator.parsers.arista import AristaParser
+from plugins.frr.parser import FrrParser
+from plugins.arista.parser import AristaParser
 
 PARSER_REGISTRY: dict[str, type] = {
     "frr": FrrParser,

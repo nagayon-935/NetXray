@@ -1,6 +1,6 @@
 import type { NetXrayIR } from "../types/netxray-ir";
 
-const SUPPORTED_VERSIONS = ["0.1.0", "0.2.0"];
+const SUPPORTED_VERSIONS = ["0.1.0", "0.2.0", "0.3.0"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const FETCH_TIMEOUT_MS = 15_000; // 15 seconds
 

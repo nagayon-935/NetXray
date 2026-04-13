@@ -21,3 +21,9 @@ class TopologyListResponse(BaseModel):
 class SaveResponse(BaseModel):
     status: str
     name: str
+
+
+class ConfigGenerateRequest(BaseModel):
+    base_ir: dict[str, Any]
+    target_ir: dict[str, Any]
+    node_id: str

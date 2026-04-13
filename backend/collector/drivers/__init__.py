@@ -1,5 +1,5 @@
-from collector.drivers.frr import FrrDriver
-from collector.drivers.arista import AristaDriver
+from plugins.frr.driver import FrrDriver
+from plugins.arista.driver import AristaDriver
 
 DRIVER_REGISTRY: dict[str, type] = {
     "frr": FrrDriver,

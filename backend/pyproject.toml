@@ -12,6 +12,12 @@ dependencies = [
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
     "uvicorn[standard]>=0.44.0",
+    "anthropic>=0.18.1",
+    "websockets>=14.1",
+    "pygnmi>=0.8.12",
+    "prometheus_client>=0.21.1",
+    "PyYAML>=6.0.1",
+    "python-hcl2>=4.3.5",
 ]
 
 [dependency-groups]

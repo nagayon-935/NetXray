@@ -32,6 +32,14 @@ export interface Interface {
   cost?: number;
   acl_in?: string | null;
   acl_out?: string | null;
+  // v0.3+ telemetry
+  traffic_in_bps?: number;
+  traffic_out_bps?: number;
+  packets_in?: number;
+  packets_out?: number;
+  errors_in?: number;
+  errors_out?: number;
+  last_updated?: string;
   [key: string]: unknown;
 }
 

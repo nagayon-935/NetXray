@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://netxray.dev/schema/ir/v0.2.0",
+  "$id": "https://netxray.dev/schema/ir/v0.3.0",
   "title": "NetXray-IR",
-  "description": "NetXray Intermediate Representation for network topology and policies",
+  "description": "NetXray Intermediate Representation for network topology and policies (v0.3: Telemetry)",
   "type": "object",
   "required": ["ir_version", "topology"],
   "additionalProperties": true,
@@ -75,7 +75,14 @@
         },
         "cost": { "type": "integer", "minimum": 0, "default": 10 },
         "acl_in": { "type": ["string", "null"], "default": null },
-        "acl_out": { "type": ["string", "null"], "default": null }
+        "acl_out": { "type": ["string", "null"], "default": null },
+        "traffic_in_bps": { "type": "integer", "default": 0 },
+        "traffic_out_bps": { "type": "integer", "default": 0 },
+        "packets_in": { "type": "integer", "default": 0 },
+        "packets_out": { "type": "integer", "default": 0 },
+        "errors_in": { "type": "integer", "default": 0 },
+        "errors_out": { "type": "integer", "default": 0 },
+        "last_updated": { "type": "string" }
       }
     },
     "Vrf": {

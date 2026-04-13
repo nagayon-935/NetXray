@@ -1,4 +1,4 @@
-from translator.parsers.frr import FrrParser
+from plugins.frr.parser import FrrParser
 
 
 def test_parse_interfaces(frr_outputs):

@@ -5,6 +5,8 @@ import type {
   PacketPath,
   RoutingUpdate,
   ShadowedRule,
+  FailureSpec,
+  ConvergenceStep,
 } from "./types";
 import { mockEngine } from "./mock-engine";
 
@@ -59,6 +61,8 @@ class WasmEngine implements SimEngine {
   loadTopology(ir: NetXrayIR): void {
     if (!wasmMod) throw new Error("WASM not initialized");
     wasmMod.load_topology(JSON.stringify(ir));
+    // Keep mockEngine in sync so What-If delegation (below) has current IR.
+    mockEngine.loadTopology(ir);
   }
 
   simulatePacket(packet: PacketHeader): PacketPath {
@@ -85,5 +89,30 @@ class WasmEngine implements SimEngine {
   detectAclShadows(aclName: string): ShadowedRule[] {
     if (!wasmMod) throw new Error("WASM not initialized");
     return JSON.parse(wasmMod.detect_acl_shadows(aclName)) as ShadowedRule[];
+  }
+
+  // ── Phase 5: What-If API ─────────────────────────────────────────────────────
+  // WASM does not yet implement these — delegate to the mock engine which runs
+  // entirely in TypeScript. When a native WASM implementation is added, swap
+  // these out for proper wasmMod calls.
+
+  simulateNodeFailure(nodeId: string): RoutingUpdate {
+    return mockEngine.simulateNodeFailure(nodeId);
+  }
+
+  simulateMultiFailure(failures: FailureSpec[]): RoutingUpdate {
+    return mockEngine.simulateMultiFailure(failures);
+  }
+
+  computeAlternatePaths(
+    srcNodeId: string,
+    dstNodeId: string,
+    failures: FailureSpec[],
+  ): PacketPath[] {
+    return mockEngine.computeAlternatePaths(srcNodeId, dstNodeId, failures);
+  }
+
+  simulateConvergence(failures: FailureSpec[]): ConvergenceStep[] {
+    return mockEngine.simulateConvergence(failures);
   }
 }
