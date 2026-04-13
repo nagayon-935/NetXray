@@ -13,7 +13,7 @@ npm run lint     # ESLint チェック
 
 ## ディレクトリ構成
 
-```
+```shellsession
 src/
 ├── types/
 │   └── netxray-ir.ts          # IR 型定義（JSON Schema から生成）
@@ -46,6 +46,7 @@ src/
 3. **バックエンド API** — `/api/topologies` 経由で取得（バックエンド起動時）
 
 サンプル IR は `public/sample-topologies/` に配置:
+
 - `simple-3node.json` — ルーター 3 台の三角トポロジ（v0.2、BGP + SRv6）
 - `spine-leaf-4.json` — Spine 2 台 + Leaf 2 台 + Host 4 台（v0.2、iBGP + eBGP + EVPN、意図的な Role ミスマッチ含む）
 
@@ -54,7 +55,7 @@ src/
 BGP / SRv6 / EVPN データを持つ IR を読み込むと、ツールバーにレイヤボタンが出現する。
 
 | ボタン | 表示内容 |
-|---|---|
+| --- | --- |
 | BGP | BGP セッションオーバーレイエッジ |
 | SRv6 | （将来拡張: SID マップオーバーレイ） |
 | EVPN | （将来拡張: VNI トンネルオーバーレイ） |
