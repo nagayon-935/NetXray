@@ -6,6 +6,8 @@ import type {
   PathHop,
   RoutingUpdate,
   ShadowedRule,
+  FailureSpec,
+  ConvergenceStep,
 } from "./types";
 
 interface Graph {
@@ -311,6 +313,291 @@ class MockEngine implements SimEngine {
           (l.source.node === nodeB && l.target.node === nodeA)
       ) ?? null
     );
+  }
+
+  // ── What-If Analysis ─────────────────────────────────────────────────────
+
+  simulateNodeFailure(nodeId: string): RoutingUpdate {
+    return this.simulateMultiFailure([{ kind: "node", id: nodeId }]);
+  }
+
+  simulateMultiFailure(failures: FailureSpec[]): RoutingUpdate {
+    if (!this.currentIR) return { affected_nodes: [], updated_paths: {} };
+
+    const excludedNodes = new Set<string>(
+      failures.filter((f) => f.kind === "node").map((f) => f.id),
+    );
+    const excludedLinks = new Set<string>(
+      failures.filter((f) => f.kind === "link").map((f) => f.id),
+    );
+
+    // Include both endpoints of each failed link in affected_nodes
+    const affectedSet = new Set<string>(excludedNodes);
+    for (const link of this.currentIR.topology.links) {
+      if (excludedLinks.has(link.id)) {
+        affectedSet.add(link.source.node);
+        affectedSet.add(link.target.node);
+      }
+    }
+
+    // Build a modified IR with failures applied
+    const modifiedIR = this.applyFailures(this.currentIR, failures);
+    const modifiedGraph = buildGraph(modifiedIR);
+
+    // Compute routing-table changes for all remaining nodes
+    const updatedPaths: RoutingUpdate["updated_paths"] = {};
+
+    for (const nodeId of this.currentIR.topology.nodes.map((n) => n.id)) {
+      if (excludedNodes.has(nodeId)) continue;
+      const node = this.currentIR.topology.nodes.find((n) => n.id === nodeId);
+      if (!node?.vrfs) continue;
+
+      const changes: { prefix: string; new_next_hop: string | null }[] = [];
+
+      for (const vrf of Object.values(node.vrfs)) {
+        for (const route of vrf.routing_table ?? []) {
+          if (!route.next_hop) continue;
+          // Check if next-hop is still reachable in modified graph
+          const path = this.dijkstraWithGraph(modifiedGraph, nodeId, route.next_hop.split("/")[0]);
+          if (!path) {
+            changes.push({ prefix: route.prefix, new_next_hop: null });
+          }
+        }
+      }
+
+      if (changes.length > 0) {
+        updatedPaths[nodeId] = changes;
+        affectedSet.add(nodeId);
+      }
+    }
+
+    return { affected_nodes: [...affectedSet], updated_paths: updatedPaths };
+  }
+
+  computeAlternatePaths(
+    srcNodeId: string,
+    dstNodeId: string,
+    failures: FailureSpec[],
+  ): PacketPath[] {
+    if (!this.currentIR) return [];
+
+    const modifiedIR = this.applyFailures(this.currentIR, failures);
+    const modifiedGraph = buildGraph(modifiedIR);
+
+    // Use modified graph for path finding
+    const path = this.dijkstraWithGraph(modifiedGraph, srcNodeId, dstNodeId);
+    if (!path) {
+      return [{ hops: [], result: "unreachable", drop_reason: "No route after failures" }];
+    }
+
+    const hops: PathHop[] = path.map((nodeId, i) => ({
+      node_id: nodeId,
+      ingress_interface: i > 0 ? this.findLinkBetween(path[i - 1], nodeId)?.target.interface ?? null : null,
+      egress_interface: i < path.length - 1 ? this.findLinkBetween(nodeId, path[i + 1])?.source.interface ?? null : null,
+    }));
+
+    return [{ hops, result: "delivered" }];
+  }
+
+  simulateConvergence(failures: FailureSpec[]): ConvergenceStep[] {
+    if (!this.currentIR) return [];
+
+    const excludedNodes = new Set<string>(
+      failures.filter((f) => f.kind === "node").map((f) => f.id),
+    );
+    const excludedLinks = new Set<string>(
+      failures.filter((f) => f.kind === "link").map((f) => f.id),
+    );
+
+    const allNodes = this.currentIR.topology.nodes
+      .map((n) => n.id)
+      .filter((id) => !excludedNodes.has(id));
+
+    const modifiedIR = this.applyFailures(this.currentIR, failures);
+    const modifiedGraph = buildGraph(modifiedIR);
+
+    // Find failure points to seed wavefront
+    const failurePoints = new Set<string>();
+    for (const link of this.currentIR.topology.links) {
+      if (excludedLinks.has(link.id)) {
+        failurePoints.add(link.source.node);
+        failurePoints.add(link.target.node);
+      }
+    }
+    for (const nodeId of excludedNodes) {
+      // Neighbours of failed node
+      for (const link of this.currentIR.topology.links) {
+        if (link.source.node === nodeId) failurePoints.add(link.target.node);
+        if (link.target.node === nodeId) failurePoints.add(link.source.node);
+      }
+    }
+
+    const steps: ConvergenceStep[] = [];
+    const stableNodes = new Set<string>();
+    let frontier = [...failurePoints].filter((id) => !excludedNodes.has(id));
+
+    // Tick 0 — initial failure
+    steps.push({
+      tick: 0,
+      updates: { affected_nodes: [...failurePoints], updated_paths: {} },
+      stableNodes: [],
+      totalStableRatio: 0,
+    });
+
+    // BFS wavefront: each tick propagates one hop further
+    const visited = new Set<string>(failurePoints);
+    let tick = 1;
+
+    while (frontier.length > 0 && tick <= 20) {
+      const nextFrontier: string[] = [];
+      const tickUpdates: RoutingUpdate["updated_paths"] = {};
+
+      for (const nodeId of frontier) {
+        stableNodes.add(nodeId);
+        // Compute new paths for this node
+        const node = modifiedIR.topology.nodes.find((n) => n.id === nodeId);
+        if (node?.vrfs) {
+          const changes: { prefix: string; new_next_hop: string | null }[] = [];
+          for (const vrf of Object.values(node.vrfs)) {
+            for (const route of vrf.routing_table ?? []) {
+              if (route.next_hop) {
+                const path = this.dijkstraWithGraph(modifiedGraph, nodeId, route.next_hop.split("/")[0]);
+                if (!path) changes.push({ prefix: route.prefix, new_next_hop: null });
+              }
+            }
+          }
+          if (changes.length > 0) tickUpdates[nodeId] = changes;
+        }
+
+        // Expand to neighbours not yet visited
+        const neighbours = modifiedGraph.adjacency.get(nodeId) ?? [];
+        for (const { neighbor } of neighbours) {
+          if (!visited.has(neighbor) && !excludedNodes.has(neighbor)) {
+            visited.add(neighbor);
+            nextFrontier.push(neighbor);
+          }
+        }
+      }
+
+      // Nodes not yet reached by wavefront are stable (no change needed)
+      for (const nodeId of allNodes) {
+        if (!visited.has(nodeId)) stableNodes.add(nodeId);
+      }
+
+      steps.push({
+        tick,
+        updates: { affected_nodes: frontier, updated_paths: tickUpdates },
+        stableNodes: [...stableNodes],
+        totalStableRatio: stableNodes.size / Math.max(allNodes.length, 1),
+      });
+
+      frontier = nextFrontier;
+      tick++;
+    }
+
+    // Final tick — all nodes converged
+    for (const nodeId of allNodes) stableNodes.add(nodeId);
+    if (frontier.length === 0 || tick > 1) {
+      steps.push({
+        tick,
+        updates: { affected_nodes: [], updated_paths: {} },
+        stableNodes: [...stableNodes],
+        totalStableRatio: 1,
+      });
+    }
+
+    return steps;
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  /** Return a cloned IR with the given failures applied. */
+  private applyFailures(ir: NetXrayIR, failures: FailureSpec[]): NetXrayIR {
+    const excludedNodes = new Set<string>(
+      failures.filter((f) => f.kind === "node").map((f) => f.id),
+    );
+    const excludedLinks = new Set<string>(
+      failures.filter((f) => f.kind === "link").map((f) => f.id),
+    );
+
+    return {
+      ...ir,
+      topology: {
+        nodes: ir.topology.nodes.filter((n) => !excludedNodes.has(n.id)),
+        links: ir.topology.links
+          .filter((l) => !excludedLinks.has(l.id))
+          .filter(
+            (l) =>
+              !excludedNodes.has(l.source.node) &&
+              !excludedNodes.has(l.target.node),
+          )
+          .map((l) => ({ ...l, state: "up" as const })),
+      },
+    };
+  }
+
+  /** Dijkstra on an arbitrary Graph (by node ID, not IP). */
+  private dijkstraWithGraph(graph: Graph, srcId: string, dstId: string): string[] | null {
+    // If dst is a full IP, find the node that owns it
+    let resolvedDst = dstId;
+    if (dstId.includes(".")) {
+      // It looks like an IP — find the owning node
+      for (const [nodeId, node] of graph.nodes) {
+        if (!node.interfaces) continue;
+        for (const iface of Object.values(node.interfaces)) {
+          if (iface.ip && iface.ip.split("/")[0] === dstId) {
+            resolvedDst = nodeId;
+            break;
+          }
+        }
+        if (resolvedDst !== dstId) break;
+      }
+      // Still an IP → not found
+      if (resolvedDst === dstId && dstId.includes(".")) return null;
+    }
+
+    const dist = new Map<string, number>();
+    const prev = new Map<string, string | null>();
+    const visited = new Set<string>();
+
+    for (const nodeId of graph.nodes.keys()) {
+      dist.set(nodeId, Infinity);
+      prev.set(nodeId, null);
+    }
+    dist.set(srcId, 0);
+
+    while (true) {
+      let minNode: string | null = null;
+      let minDist = Infinity;
+      for (const [nodeId, d] of dist) {
+        if (!visited.has(nodeId) && d < minDist) {
+          minDist = d;
+          minNode = nodeId;
+        }
+      }
+      if (minNode === null) break;
+      visited.add(minNode);
+      if (minNode === resolvedDst) break;
+
+      for (const { neighbor, cost } of graph.adjacency.get(minNode) ?? []) {
+        if (visited.has(neighbor)) continue;
+        const newDist = minDist + cost;
+        if (newDist < dist.get(neighbor)!) {
+          dist.set(neighbor, newDist);
+          prev.set(neighbor, minNode);
+        }
+      }
+    }
+
+    if ((dist.get(resolvedDst) ?? Infinity) === Infinity) return null;
+
+    const path: string[] = [];
+    let current: string | null = resolvedDst;
+    while (current !== null) {
+      path.unshift(current);
+      current = prev.get(current) ?? null;
+    }
+    return path;
   }
 }
 

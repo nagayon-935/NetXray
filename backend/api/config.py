@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     arista_eapi_port: int = 443
     schema_path: Path = Path(__file__).parent.parent.parent / "schema" / "netxray-ir.schema.json"
 
+    # LLM settings
+    llm_api_key: str | None = None
+    llm_model: str = "claude-3-opus-20240229"
+    llm_base_url: str | None = None
+
     # Default credentials for common containerlab kinds.
     # Used if no specific credentials are provided in the collection request.
     clab_default_creds: dict[str, dict[str, str]] = {

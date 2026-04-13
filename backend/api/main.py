@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from api.config import settings
-from api.routes import collect, topology
+from api.routes import collect, topology, config, diagnosis, share, ws, telemetry, metrics, iac
 
 
 @asynccontextmanager
@@ -28,6 +28,14 @@ app.add_middleware(
 
 app.include_router(topology.router, prefix="/api")
 app.include_router(collect.router, prefix="/api")
+app.include_router(config.router, prefix="/api")
+app.include_router(diagnosis.router, prefix="/api")
+app.include_router(share.router, prefix="/api")
+app.include_router(ws.router, prefix="/api")
+app.include_router(telemetry.router, prefix="/api")
+app.include_router(metrics.router)
+app.include_router(iac.router, prefix="/api")
+ # /metrics typically at root
 
 
 @app.get("/health")

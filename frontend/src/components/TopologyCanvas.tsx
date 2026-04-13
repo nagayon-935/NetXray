@@ -11,49 +11,140 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { useTopologyStore } from "../stores/topology-store";
-import { useLayerStore } from "../stores/layer-store";
+import { useViewStore } from "../stores/view-store";
+import { useWhatIfStore } from "../stores/whatif-store";
 import { useTopologyLayout, type LayoutPreset } from "../hooks/useTopologyLayout";
 import { loadIRFromUrl } from "../lib/ir-loader";
 import { useIRLoad } from "../hooks/useIRLoad";
-import { deriveBgpEdges } from "../lib/bgp-overlay";
+import { VIEW_REGISTRY, type ViewResult } from "../lib/views";
 import { nodeTypes } from "./nodes/registry";
 import { NetworkEdge } from "./edges/NetworkEdge";
 import { BgpEdge } from "./edges/BgpEdge";
+import { HeatmapEdge } from "./edges/HeatmapEdge";
 import { SimToolbar } from "./toolbar/SimToolbar";
+import { useTelemetryWS } from "../hooks/useTelemetryWS";
+import { useLayerStore } from "../stores/layer-store";
 import { NodeDetailPanel } from "./panels/NodeDetailPanel";
 import { AclTablePanel } from "./panels/AclTablePanel";
 import { PacketSimPanel } from "./panels/PacketSimPanel";
 import { SnapshotPanel } from "./panels/SnapshotPanel";
+import { WhatIfPanel } from "./panels/WhatIfPanel";
+import { ConvergencePanel } from "./panels/ConvergencePanel";
+import { TimelinePanel } from "./panels/TimelinePanel";
+import { ConfigGenPanel } from "./panels/ConfigGenPanel";
+import { DiagnosisPanel } from "./panels/DiagnosisPanel";
 
 const edgeTypes = {
   network: NetworkEdge,
   bgp: BgpEdge,
+  heatmap: HeatmapEdge,
 };
 
 export function TopologyCanvas() {
   const ir = useTopologyStore((s) => s.ir);
-  const storeNodes = useTopologyStore((s) => s.flowNodes);
-  const storeEdges = useTopologyStore((s) => s.flowEdges);
   const loadIR = useTopologyStore((s) => s.loadIR);
   const selectNode = useTopologyStore((s) => s.selectNode);
   const activePanel = useTopologyStore((s) => s.activePanel);
+  const heatmapEnabled = useLayerStore((s) => s.layers.heatmap);
+  useTelemetryWS(ir?.topology_name || "default");
 
-  const bgpVisible = useLayerStore((s) => s.layers.bgp);
+  const activeViewId = useViewStore((s) => s.activeView);
+  const activeView = VIEW_REGISTRY[activeViewId];
 
-  // Compute BGP overlay edges from IR whenever the layer is toggled or IR changes
-  const bgpEdges = useMemo(() => {
-    if (!ir || !bgpVisible) return [];
-    return deriveBgpEdges(ir);
-  }, [ir, bgpVisible]);
+  // Derived view state (nodes/edges from IR for the current view)
+  const viewResult = useMemo<ViewResult>(() => {
+    if (!ir) return { nodes: [], edges: [] };
+    return activeView.derive(ir);
+  }, [ir, activeView]);
 
-  // Combined edge list: physical edges from store + optional BGP overlay
-  const combinedEdges = useMemo(
-    () => [...storeEdges, ...bgpEdges],
-    [storeEdges, bgpEdges]
+  // What-If state for ghost rendering
+  const whatIfActive = useWhatIfStore((s) => s.isActive);
+  const whatIfFailures = useWhatIfStore((s) => s.failures);
+  const whatIfAffected = useWhatIfStore((s) => s.affectedNodes);
+
+  // What-If: build sets of failed node / link IDs for styling
+  const failedNodeIds = useMemo(
+    () =>
+      new Set(
+        whatIfActive
+          ? whatIfFailures.filter((f) => f.kind === "node").map((f) => f.id)
+          : []
+      ),
+    [whatIfActive, whatIfFailures]
+  );
+  const failedLinkIds = useMemo(
+    () =>
+      new Set(
+        whatIfActive
+          ? whatIfFailures.filter((f) => f.kind === "link").map((f) => f.id)
+          : []
+      ),
+    [whatIfActive, whatIfFailures]
   );
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(storeNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(combinedEdges);
+  // Apply What-If ghost styling to edges
+  const styledEdges = useMemo(
+    () =>
+      viewResult.edges.map((e) => {
+        const edge = { ...e };
+        if (heatmapEnabled) {
+          edge.type = "heatmap";
+        }
+        if (!whatIfActive) return edge;
+        if (failedLinkIds.has(e.id)) {
+          return {
+            ...edge,
+            style: {
+              ...edge.style,
+              stroke: "#ef4444",
+              strokeDasharray: "6,4",
+              strokeWidth: 2,
+              opacity: 0.5,
+            },
+            animated: false,
+          };
+        }
+        return edge;
+      }),
+    [viewResult.edges, whatIfActive, failedLinkIds, heatmapEnabled]
+  );
+
+  // Apply What-If ghost styling to nodes: failed=red ghost, affected=orange tint
+  const styledNodes = useMemo(
+    () =>
+      viewResult.nodes.map((n) => {
+        if (!whatIfActive) return n;
+        if (failedNodeIds.has(n.id)) {
+          return {
+            ...n,
+            style: {
+              ...n.style,
+              opacity: 0.35,
+              filter: "grayscale(60%) sepia(30%)",
+              outline: "2px dashed #ef4444",
+              outlineOffset: "2px",
+              borderRadius: "6px",
+            },
+          };
+        }
+        if (whatIfAffected.has(n.id)) {
+          return {
+            ...n,
+            style: {
+              ...n.style,
+              outline: "2px solid #f97316",
+              outlineOffset: "2px",
+              borderRadius: "6px",
+            },
+          };
+        }
+        return n;
+      }),
+    [viewResult.nodes, whatIfActive, failedNodeIds, whatIfAffected]
+  );
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(styledNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(styledEdges);
   const { applyLayout } = useTopologyLayout();
   const layoutApplied = useRef(false);
 
@@ -62,30 +153,50 @@ export function TopologyCanvas() {
   }, []);
   const { handleFile } = useIRLoad(onIRLoad);
 
-  // Sync combined edges into ReactFlow state (physical + BGP overlay)
+  // Sync nodes and edges into ReactFlow state when derived view or What-If changes
   useEffect(() => {
-    setEdges(combinedEdges);
-  }, [combinedEdges, setEdges]);
-
-  // Apply layout only when nodes change (not on edge-only updates)
-  useEffect(() => {
-    if (storeNodes.length === 0) return;
-    if (layoutApplied.current && storeNodes.length === nodes.length) return;
-
-    applyLayout(storeNodes, storeEdges, "spine-leaf").then(({ nodes: laid }) => {
-      setNodes(laid);
+    // If view pre-computes positions (needsLayout: false), just set them
+    if (!activeView.needsLayout) {
+      setNodes(styledNodes);
+      setEdges(styledEdges);
       layoutApplied.current = true;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- layout depends only on node list changes
-  }, [storeNodes, applyLayout, setNodes]);
+      return;
+    }
+
+    // Otherwise (Physical view), apply ELK layout if needed
+    if (styledNodes.length === 0) {
+      setNodes([]);
+      setEdges([]);
+      return;
+    }
+
+    // Re-layout if IR changed or node count changed or we specifically want a fresh layout
+    if (!layoutApplied.current || styledNodes.length !== nodes.length) {
+      applyLayout(styledNodes, styledEdges, "spine-leaf").then(({ nodes: laid }) => {
+        setNodes(laid);
+        setEdges(styledEdges);
+        layoutApplied.current = true;
+      });
+    } else {
+      // Just update styles (What-If) without full relayout if node structure is same
+      setNodes((prev) =>
+        prev.map((n) => {
+          const styled = styledNodes.find((s) => s.id === n.id);
+          return styled ? { ...n, style: styled.style, data: styled.data } : n;
+        })
+      );
+      setEdges(styledEdges);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [styledNodes, styledEdges, activeView.needsLayout]);
 
   const handleLayoutChange = useCallback(
     (preset: LayoutPreset) => {
-      applyLayout(storeNodes, storeEdges, preset).then(({ nodes: laid }) => {
+      applyLayout(styledNodes, styledEdges, preset).then(({ nodes: laid }) => {
         setNodes(laid);
       });
     },
-    [storeNodes, storeEdges, applyLayout, setNodes]
+    [styledNodes, styledEdges, applyLayout, setNodes]
   );
 
   const handleLoadSample = useCallback(
@@ -176,6 +287,19 @@ export function TopologyCanvas() {
         {activePanel === "acl" && <AclTablePanel />}
         {activePanel === "packet" && <PacketSimPanel />}
         {activePanel === "snapshot" && <SnapshotPanel />}
+        {activePanel === "whatif" && <WhatIfPanel />}
+        {activePanel === "convergence" && <ConvergencePanel />}
+        {activePanel === "timeline" && <TimelinePanel />}
+        {activePanel === "config" && (
+          <div className="w-96 border-l bg-white shadow-xl flex flex-col">
+            <ConfigGenPanel selectedNodeId={useTopologyStore.getState().selectedNodeId} />
+          </div>
+        )}
+        {activePanel === "diagnosis" && (
+          <div className="w-96 border-l bg-white shadow-xl flex flex-col">
+            <DiagnosisPanel />
+          </div>
+        )}
       </div>
     </div>
   );

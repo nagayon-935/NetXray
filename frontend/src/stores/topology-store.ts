@@ -3,6 +3,8 @@ import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import type { NetXrayIR, Node, Link } from "../types/netxray-ir";
 import type { PacketPath, ShadowedRule } from "../engine/types";
 import { getEngine } from "../engine/wasm-engine";
+import { useSnapshotStore } from "./snapshot-store";
+import { applyPatch } from "../lib/ir-patch";
 
 export type EngineStatus = "loading" | "wasm" | "mock";
 
@@ -14,7 +16,7 @@ export interface TopologyState {
   selectedAclName: string | null;
   packetPath: PacketPath | null;
   shadowedRules: Record<string, ShadowedRule[]>;
-  activePanel: "detail" | "acl" | "packet" | "snapshot" | null;
+  activePanel: "detail" | "acl" | "packet" | "snapshot" | "whatif" | "convergence" | "timeline" | "config" | "diagnosis" | null;
   engineStatus: EngineStatus;
 
   loadIR: (ir: NetXrayIR) => void;
@@ -22,10 +24,11 @@ export interface TopologyState {
   selectAcl: (aclName: string | null) => void;
   setPacketPath: (path: PacketPath | null) => void;
   setShadowedRules: (aclName: string, rules: ShadowedRule[]) => void;
-  setActivePanel: (panel: "detail" | "acl" | "packet" | "snapshot" | null) => void;
+  setActivePanel: (panel: "detail" | "acl" | "packet" | "snapshot" | "whatif" | "convergence" | "timeline" | "config" | "diagnosis" | null) => void;
   toggleLinkState: (linkId: string) => void;
   updateFlowElements: () => void;
   setEngineStatus: (status: "wasm" | "mock") => void;
+  applyPatches: (patches: any[]) => void;
 }
 
 function irNodeToFlowNode(node: Node): FlowNode {
@@ -55,7 +58,9 @@ function irLinkToFlowEdge(link: Link, packetPath: PacketPath | null): FlowEdge {
     animated: isOnPath ?? false,
     data: {
       state: link.state,
+      sourceNode: link.source.node,
       sourceInterface: link.source.interface,
+      targetNode: link.target.node,
       targetInterface: link.target.interface,
       isOnPath: isOnPath ?? false,
     },
@@ -105,6 +110,10 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
   toggleLinkState: (linkId) => {
     const { ir } = get();
     if (!ir) return;
+
+    // Auto-snapshot before mutating so the timeline records each toggle
+    useSnapshotStore.getState().autoSnapshot(ir, `link toggled: ${linkId}`);
+
     const updatedLinks = ir.topology.links.map((link) =>
       link.id === linkId
         ? { ...link, state: link.state === "up" ? ("down" as const) : ("up" as const) }
@@ -124,4 +133,13 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
   },
 
   setEngineStatus: (status) => set({ engineStatus: status }),
+
+  applyPatches: (patches) => {
+    const { ir } = get();
+    if (!ir) return;
+    const updatedIR = applyPatch(ir, patches);
+    set({ ir: updatedIR });
+    // After patching telemetry, we might need to re-generate flow elements if heatmap is active
+    get().updateFlowElements();
+  },
 }));
