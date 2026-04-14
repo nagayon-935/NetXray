@@ -6,7 +6,7 @@ def export_to_clab(ir: Dict[str, Any]) -> str:
     Export NetXray-IR to containerlab .clab.yml format.
     """
     clab = {
-        "name": ir.get("topology_name", "netxray-exported"),
+        "name": ir.get("metadata", {}).get("name", "netxray-exported"),
         "topology": {
             "nodes": {},
             "links": []

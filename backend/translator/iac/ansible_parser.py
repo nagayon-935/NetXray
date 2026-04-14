@@ -35,7 +35,6 @@ def parse_ansible_inventory(inventory_content: str) -> Dict[str, Any]:
     
     return {
         "ir_version": "0.3.0",
-        "topology_name": "ansible-imported",
         "topology": {
             "nodes": nodes,
             "links": []
