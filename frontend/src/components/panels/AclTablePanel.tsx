@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useTopologyStore } from "../../stores/topology-store";
 import { getEngine } from "../../engine/wasm-engine";
+import { PanelFrame } from "./shared/PanelFrame";
 
 export function AclTablePanel() {
   const ir = useTopologyStore((s) => s.ir);
@@ -19,9 +20,9 @@ export function AclTablePanel() {
 
   if (!ir?.policies?.acls || aclNames.length === 0) {
     return (
-      <div className="w-96 bg-white border-l border-slate-200 p-4">
+      <PanelFrame title="ACL Viewer" onClose={() => selectAcl(null)} wide>
         <div className="text-sm text-slate-400">No ACLs defined</div>
-      </div>
+      </PanelFrame>
     );
   }
 
@@ -30,20 +31,8 @@ export function AclTablePanel() {
   const shadowedSeqs = new Set(shadows.map((s) => s.shadowed_seq));
 
   return (
-    <div className="w-96 bg-white border-l border-slate-200 overflow-y-auto h-full">
-      <div className="flex items-center justify-between p-3 border-b border-slate-200 bg-slate-50">
-        <h2 className="font-semibold text-sm text-slate-800">ACL Viewer</h2>
-        {selectedAclName && (
-          <button
-            onClick={() => selectAcl(null)}
-            className="text-slate-400 hover:text-slate-600 text-lg leading-none"
-          >
-            x
-          </button>
-        )}
-      </div>
-
-      <div className="p-3 border-b border-slate-100">
+    <PanelFrame title="ACL Viewer" onClose={() => selectAcl(null)} wide>
+      <div className="border-b border-slate-100 -mx-4 px-3 pb-3">
         <div className="text-xs text-slate-500 uppercase tracking-wide mb-2">Select ACL</div>
         <div className="flex flex-wrap gap-1">
           {aclNames.map((name) => (
@@ -131,6 +120,6 @@ export function AclTablePanel() {
           )}
         </>
       )}
-    </div>
+    </PanelFrame>
   );
 }

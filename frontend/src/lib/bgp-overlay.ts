@@ -1,5 +1,6 @@
 import type { Edge as FlowEdge } from "@xyflow/react";
 import type { NetXrayIR, BgpSession } from "../types/netxray-ir";
+import { COLORS } from "./colors";
 
 // BGP role complement table (RFC 9234)
 const ROLE_COMPLEMENT: Record<string, string> = {
@@ -41,7 +42,7 @@ export function deriveBgpEdges(ir: NetXrayIR): FlowEdge[] {
       seen.add(edgeKey);
 
       const isEstablished = session.state === "established";
-      const stateColor = isEstablished ? "#10b981" : "#f59e0b";
+      const stateColor = isEstablished ? COLORS.UP : COLORS.WARN;
 
       edges.push({
         id: `bgp-${edgeKey}`,

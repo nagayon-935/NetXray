@@ -11,6 +11,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from constants import BGP_STATES as _BGP_STATES
+from translator.ir_helpers import get_ir_nodes, get_ir_links, get_node_interfaces
+
 
 @dataclass
 class BgpMetrics:
@@ -43,12 +46,6 @@ class DerivedMetrics:
     links: LinkMetrics = field(default_factory=LinkMetrics)
 
 
-_BGP_STATES = (
-    "established", "idle", "connect", "active",
-    "opensent", "openconfirm", "unknown",
-)
-
-
 def derive_metrics(ir: dict[str, Any]) -> DerivedMetrics:
     """
     Walk the IR dict and produce structured :class:`DerivedMetrics`.
@@ -58,9 +55,8 @@ def derive_metrics(ir: dict[str, Any]) -> DerivedMetrics:
     """
     result = DerivedMetrics()
 
-    topo = ir.get("topology") or {}
-    nodes: list[dict] = topo.get("nodes") or []
-    links: list[dict] = topo.get("links") or []
+    nodes = get_ir_nodes(ir)
+    links = get_ir_links(ir)
 
     # Node counts by type
     for node in nodes:
@@ -81,7 +77,7 @@ def derive_metrics(ir: dict[str, Any]) -> DerivedMetrics:
     # Interface state + traffic counters
     for node in nodes:
         node_id = node.get("id", "")
-        ifaces = node.get("interfaces") or {}
+        ifaces = get_node_interfaces(node)
         for iface_name, iface in ifaces.items():
             if iface.get("state") == "up":
                 result.interfaces.up_count += 1

@@ -5,6 +5,7 @@ import {
   getBezierPath,
   type EdgeProps,
 } from "@xyflow/react";
+import { COLORS } from "../../lib/colors";
 
 interface NetworkEdgeData {
   state: "up" | "down";
@@ -37,10 +38,10 @@ function NetworkEdgeComponent({
     targetPosition,
   });
 
-  let strokeColor = "#94a3b8";
-  if (isDown) strokeColor = "#ef4444";
-  else if (isOnPath) strokeColor = "#3b82f6";
-  if (selected) strokeColor = "#6366f1";
+  let strokeColor: string = COLORS.NEUTRAL;
+  if (isDown) strokeColor = COLORS.DOWN;
+  else if (isOnPath) strokeColor = COLORS.PATH;
+  if (selected) strokeColor = COLORS.SELECTED;
 
   return (
     <>

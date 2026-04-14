@@ -15,19 +15,8 @@
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import type { NetXrayIR } from "../../types/netxray-ir";
 import type { ViewDef, ViewResult } from "./index";
-
-// ── Layout constants ─────────────────────────────────────────────────────────
-
-const CHILD_W = 190;
-const CHILD_H = 70;
-const CHILD_COLS = 2;
-const CHILD_GAP_X = 20;
-const CHILD_GAP_Y = 20;
-const GROUP_PAD_X = 30;
-const GROUP_PAD_Y = 50; // extra top pad for label
-const GROUP_GAP_X = 80;
-const GROUP_GAP_Y = 80;
-const GROUPS_PER_ROW = 3;
+import { COLORS } from "../colors";
+import { CHILD_W, CHILD_H, CHILD_COLS, CHILD_GAP_X, CHILD_GAP_Y, GROUP_PAD_X, GROUP_PAD_Y, GROUP_GAP_X, GROUP_GAP_Y, GROUPS_PER_ROW } from "./layout-constants";
 
 // ── Colors per AS (cycle through palette) ────────────────────────────────────
 
@@ -168,7 +157,7 @@ function derive(ir: NetXrayIR): ViewResult {
           sourceRole: session.role ?? null,
         },
         style: {
-          stroke: isEstablished ? "#f59e0b" : "#94a3b8",
+          stroke: isEstablished ? COLORS.WARN : COLORS.NEUTRAL,
           strokeWidth: 2,
           strokeDasharray: isEstablished ? undefined : "8,4",
         },
@@ -197,8 +186,8 @@ function derive(ir: NetXrayIR): ViewResult {
       },
       style:
         link.state === "down"
-          ? { stroke: "#ef4444", strokeDasharray: "5,5" }
-          : { stroke: "#94a3b8", strokeWidth: 1.5 },
+          ? { stroke: COLORS.DOWN, strokeDasharray: "5,5" }
+          : { stroke: COLORS.NEUTRAL, strokeWidth: 1.5 },
     });
   }
 

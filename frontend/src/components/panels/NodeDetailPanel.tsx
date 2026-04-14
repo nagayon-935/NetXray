@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useTopologyStore } from "../../stores/topology-store";
 import { detectBgpRoleMismatches, type BgpRoleMismatch } from "../../lib/bgp-overlay";
 import type { Node, BgpSession, Srv6Sid, Vni } from "../../types/netxray-ir";
+import { PanelFrame } from "./shared/PanelFrame";
 
 // ─── Color maps ─────────────────────────────────────────────────────────────
 
@@ -410,23 +411,9 @@ export function NodeDetailPanel() {
   const currentTab = tabs.find((t) => t.id === activeTab) ? activeTab : "general";
 
   return (
-    <div className="w-80 bg-white border-l border-slate-200 flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-50 flex-shrink-0">
-        <h2 className="font-semibold text-sm text-slate-800 truncate">
-          {node.hostname || node.id}
-        </h2>
-        <button
-          onClick={() => selectNode(null)}
-          className="text-slate-400 hover:text-slate-600 text-lg leading-none ml-2"
-          aria-label="Close"
-        >
-          ×
-        </button>
-      </div>
-
+    <PanelFrame title={node.hostname || node.id} onClose={() => selectNode(null)}>
       {/* Tab bar */}
-      <div className="flex border-b border-slate-200 bg-slate-50 flex-shrink-0 overflow-x-auto">
+      <div className="flex border-b border-slate-200 bg-slate-50 flex-shrink-0 overflow-x-auto -mx-4 -mt-3 px-4">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -448,12 +435,12 @@ export function NodeDetailPanel() {
       </div>
 
       {/* Tab content */}
-      <div className="overflow-y-auto flex-1">
+      <div>
         {currentTab === "general" && <GeneralTab node={node} />}
         {currentTab === "bgp" && <BgpTab node={node} mismatches={nodeMismatches} />}
         {currentTab === "srv6" && <Srv6Tab node={node} />}
         {currentTab === "evpn" && <EvpnTab node={node} />}
       </div>
-    </div>
+    </PanelFrame>
   );
 }

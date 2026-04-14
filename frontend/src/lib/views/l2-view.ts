@@ -13,19 +13,8 @@
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import type { NetXrayIR } from "../../types/netxray-ir";
 import type { ViewDef, ViewResult } from "./index";
-
-// ── Layout constants ─────────────────────────────────────────────────────────
-
-const CHILD_W = 190;
-const CHILD_H = 70;
-const CHILD_COLS = 2;
-const CHILD_GAP_X = 20;
-const CHILD_GAP_Y = 20;
-const GROUP_PAD_X = 30;
-const GROUP_PAD_Y = 50;
-const GROUP_GAP_X = 80;
-const GROUP_GAP_Y = 80;
-const GROUPS_PER_ROW = 3;
+import { COLORS } from "../colors";
+import { CHILD_W, CHILD_H, CHILD_COLS, CHILD_GAP_X, CHILD_GAP_Y, GROUP_PAD_X, GROUP_PAD_Y, GROUP_GAP_X, GROUP_GAP_Y, GROUPS_PER_ROW } from "./layout-constants";
 
 const DOMAIN_COLORS = [
   { bg: "rgba(16,185,129,0.06)", border: "rgba(16,185,129,0.4)", label: "#065f46" },
@@ -242,8 +231,8 @@ function derive(ir: NetXrayIR): ViewResult {
       },
       style:
         link.state === "down"
-          ? { stroke: "#ef4444", strokeDasharray: "5,5" }
-          : { stroke: "#94a3b8" },
+          ? { stroke: COLORS.DOWN, strokeDasharray: "5,5" }
+          : { stroke: COLORS.NEUTRAL },
     });
   }
 

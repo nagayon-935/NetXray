@@ -10,6 +10,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
+import { COLORS } from "../lib/colors";
 import { useTopologyStore } from "../stores/topology-store";
 import { useViewStore } from "../stores/view-store";
 import { useWhatIfStore } from "../stores/whatif-store";
@@ -99,7 +100,7 @@ export function TopologyCanvas() {
             ...edge,
             style: {
               ...edge.style,
-              stroke: "#ef4444",
+              stroke: COLORS.DOWN,
               strokeDasharray: "6,4",
               strokeWidth: 2,
               opacity: 0.5,
@@ -124,7 +125,7 @@ export function TopologyCanvas() {
               ...n.style,
               opacity: 0.35,
               filter: "grayscale(60%) sepia(30%)",
-              outline: "2px dashed #ef4444",
+              outline: `2px dashed ${COLORS.DOWN}`,
               outlineOffset: "2px",
               borderRadius: "6px",
             },
@@ -275,10 +276,10 @@ export function TopologyCanvas() {
               position="bottom-right"
               nodeColor={(n) => {
                 switch (n.type) {
-                  case "router": return "#3b82f6";
-                  case "switch": return "#10b981";
+                  case "router": return COLORS.PATH;
+                  case "switch": return COLORS.UP;
                   case "host": return "#8b5cf6";
-                  default: return "#94a3b8";
+                  default: return COLORS.NEUTRAL;
                 }
               }}
             />

@@ -4,6 +4,7 @@ from prometheus_client import Gauge, generate_latest, CONTENT_TYPE_LATEST
 from api.state import get_current_ir
 from diagnosis.rules import check_acl_best_practices
 from metrics import derive_metrics
+from constants import BGP_STATES
 
 router = APIRouter(tags=["metrics"])
 
@@ -20,7 +21,6 @@ interfaces_down_total = Gauge('netxray_interfaces_down_total', 'Total number of 
 traffic_in_bps = Gauge('netxray_traffic_in_bps', 'Inbound traffic in bps per interface', ['node', 'interface'])
 traffic_out_bps = Gauge('netxray_traffic_out_bps', 'Outbound traffic in bps per interface', ['node', 'interface'])
 
-BGP_STATES = ("established", "idle", "connect", "active", "opensent", "openconfirm", "unknown")
 
 
 @router.get("/metrics")

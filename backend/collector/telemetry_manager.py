@@ -24,7 +24,44 @@ from typing import Any
 
 from fastapi import WebSocket
 
+from constants import MOCK_TELEMETRY_INTERVAL_SEC, MOCK_TRAFFIC_MIN_BPS, MOCK_TRAFFIC_MAX_BPS
+
 logger = logging.getLogger(__name__)
+
+
+def _generate_mock_patches(ir: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Pure function: build JSON Patch ops from the current IR.
+
+    Generates ``replace`` ops for ``traffic_in_bps``, ``traffic_out_bps``,
+    and ``last_updated`` on every interface that has an IP address.
+    Uses the ``~{nodeId}`` extended path syntax for array element lookup.
+
+    Returns an empty list when the IR has no qualifying interfaces.
+    """
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    patches: list[dict[str, Any]] = []
+
+    for node in (ir.get("topology") or {}).get("nodes") or []:
+        node_id = node.get("id")
+        if not node_id:
+            continue
+        interfaces = node.get("interfaces") or {}
+        for iface_name, iface in interfaces.items():
+            if not iface.get("ip"):
+                continue
+
+            in_bps = random.randint(MOCK_TRAFFIC_MIN_BPS, MOCK_TRAFFIC_MAX_BPS)
+            out_bps = random.randint(MOCK_TRAFFIC_MIN_BPS, MOCK_TRAFFIC_MAX_BPS)
+
+            base = f"/topology/nodes/~{node_id}/interfaces/{iface_name}"
+            patches += [
+                {"op": "replace", "path": f"{base}/traffic_in_bps",  "value": in_bps},
+                {"op": "replace", "path": f"{base}/traffic_out_bps", "value": out_bps},
+                {"op": "replace", "path": f"{base}/last_updated",    "value": now},
+            ]
+
+    return patches
 
 
 class TelemetryManager:
@@ -101,43 +138,19 @@ class TelemetryManager:
         try:
             while True:
                 await self._send_mock_counters(topology_name)
-                await asyncio.sleep(2)
+                await asyncio.sleep(MOCK_TELEMETRY_INTERVAL_SEC)
         except asyncio.CancelledError:
             logger.info("Mock telemetry loop cancelled: topology=%s", topology_name)
 
     async def _send_mock_counters(self, topology_name: str) -> None:
         """Build and broadcast one round of fake traffic counters."""
-        # Import here to avoid a circular import at module load time.
         from api.state import get_current_ir
 
         ir = get_current_ir()
         if not ir:
             return
 
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        patches: list[dict[str, Any]] = []
-
-        for node in ir.get("topology", {}).get("nodes", []):
-            node_id = node.get("id")
-            if not node_id:
-                continue
-            interfaces = node.get("interfaces") or {}
-            for iface_name, iface in interfaces.items():
-                if not iface.get("ip"):
-                    continue  # skip interfaces without an IP address (loopback, etc.)
-
-                # Simulate traffic with realistic noise
-                in_bps = random.randint(10_000, 900_000)
-                out_bps = random.randint(10_000, 900_000)
-
-                # Use `~{nodeId}` path extension for ID-based array lookup
-                base = f"/topology/nodes/~{node_id}/interfaces/{iface_name}"
-                patches += [
-                    {"op": "replace", "path": f"{base}/traffic_in_bps",  "value": in_bps},
-                    {"op": "replace", "path": f"{base}/traffic_out_bps", "value": out_bps},
-                    {"op": "replace", "path": f"{base}/last_updated",    "value": now},
-                ]
-
+        patches = _generate_mock_patches(ir)
         if patches:
             await self.broadcast_patch(topology_name, patches)
 

@@ -12,6 +12,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWhatIfStore } from "../../stores/whatif-store";
 import { useTopologyStore } from "../../stores/topology-store";
+import { PanelFrame } from "./shared/PanelFrame";
+import { CONVERGENCE_TICK_MS } from "../../lib/ui-constants";
 
 export function ConvergencePanel() {
   const { convergenceSteps, failures, runConvergence, isSimulating } = useWhatIfStore();
@@ -45,7 +47,7 @@ export function ConvergencePanel() {
         }
         return t + 1;
       });
-    }, 700);
+    }, CONVERGENCE_TICK_MS);
   }, [totalTicks, stopPlay]);
 
   // Cleanup on unmount
@@ -83,37 +85,43 @@ export function ConvergencePanel() {
 
   if (failures.length === 0) {
     return (
-      <div className="w-80 bg-white border-l border-slate-200 p-4 space-y-3 text-xs">
-        <button onClick={handleBack} className="text-blue-500 hover:text-blue-700">
-          ← Back to What-If
-        </button>
-        <p className="text-slate-400">No failures defined. Go back and add failures first.</p>
-      </div>
+      <PanelFrame title="Convergence Replay" onClose={() => setActivePanel(null)}>
+        <div className="space-y-3 text-xs">
+          <button onClick={handleBack} className="text-blue-500 hover:text-blue-700">
+            ← Back to What-If
+          </button>
+          <p className="text-slate-400">No failures defined. Go back and add failures first.</p>
+        </div>
+      </PanelFrame>
     );
   }
 
   if (totalTicks === 0 && !isSimulating) {
     return (
-      <div className="w-80 bg-white border-l border-slate-200 p-4 space-y-3 text-xs">
-        <button onClick={handleBack} className="text-blue-500 hover:text-blue-700">
-          ← Back to What-If
-        </button>
-        <p className="text-slate-500 mb-2">No convergence data yet.</p>
-        <button
-          onClick={handleRerun}
-          className="w-full px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium"
-        >
-          Run Convergence Simulation
-        </button>
-      </div>
+      <PanelFrame title="Convergence Replay" onClose={() => setActivePanel(null)}>
+        <div className="space-y-3 text-xs">
+          <button onClick={handleBack} className="text-blue-500 hover:text-blue-700">
+            ← Back to What-If
+          </button>
+          <p className="text-slate-500 mb-2">No convergence data yet.</p>
+          <button
+            onClick={handleRerun}
+            className="w-full px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium"
+          >
+            Run Convergence Simulation
+          </button>
+        </div>
+      </PanelFrame>
     );
   }
 
   if (isSimulating) {
     return (
-      <div className="w-80 bg-white border-l border-slate-200 p-4 text-slate-400 text-sm flex items-center gap-2">
-        <span className="animate-spin">⟳</span> Simulating convergence…
-      </div>
+      <PanelFrame title="Convergence Replay" onClose={() => setActivePanel(null)}>
+        <div className="text-slate-400 text-sm flex items-center gap-2">
+          <span className="animate-spin">⟳</span> Simulating convergence…
+        </div>
+      </PanelFrame>
     );
   }
 
@@ -123,21 +131,11 @@ export function ConvergencePanel() {
   const stablePercent = Math.round(stableRatio * 100);
 
   return (
-    <div className="w-80 bg-white border-l border-slate-200 flex flex-col h-full text-xs">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-blue-50 border-b border-blue-200">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-blue-700">Convergence Replay</span>
-          <span className="text-blue-400 text-[10px]">
-            {totalTicks} tick{totalTicks !== 1 ? "s" : ""}
-          </span>
-        </div>
-        <button onClick={handleBack} className="text-blue-400 hover:text-blue-700 text-[10px]">
-          ← What-If
+    <PanelFrame title="Convergence Replay" onClose={() => setActivePanel(null)}>
+      <div className="space-y-3 text-xs">
+        <button onClick={handleBack} className="text-blue-500 hover:text-blue-700 block mb-2">
+          ← Back to What-If
         </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {/* Progress bar */}
         <div>
           <div className="flex justify-between mb-1 text-[10px] text-slate-500">
@@ -313,6 +311,6 @@ export function ConvergencePanel() {
           </div>
         </div>
       </div>
-    </div>
+    </PanelFrame>
   );
 }

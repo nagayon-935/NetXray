@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTopologyStore } from "../../stores/topology-store";
 import { useSnapshotStore, diffSnapshots, type Snapshot } from "../../stores/snapshot-store";
+import { PanelFrame } from "./shared/PanelFrame";
 
 function formatTimestamp(ts: number): string {
   return new Date(ts).toLocaleTimeString([], {
@@ -65,21 +66,9 @@ export function SnapshotPanel() {
   };
 
   return (
-    <div className="w-80 bg-white border-l border-slate-200 flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-50 flex-shrink-0">
-        <h2 className="font-semibold text-sm text-slate-800">Snapshots</h2>
-        <button
-          onClick={() => setActivePanel(null)}
-          className="text-slate-400 hover:text-slate-600 text-lg leading-none"
-          aria-label="Close"
-        >
-          ×
-        </button>
-      </div>
-
+    <PanelFrame title="Snapshots" onClose={() => setActivePanel(null)}>
       {/* Save section */}
-      <div className="p-3 border-b border-slate-100 flex-shrink-0">
+      <div className="border-b border-slate-100 flex-shrink-0 -mx-4 px-3 pb-3">
         <div className="text-xs text-slate-500 mb-2">Save current state as snapshot</div>
         <div className="flex gap-1.5">
           <input
@@ -104,7 +93,7 @@ export function SnapshotPanel() {
       </div>
 
       {/* Snapshot list */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto -mx-4">
         {snapshots.length === 0 ? (
           <div className="p-4 text-center text-xs text-slate-400">
             <div className="text-2xl mb-2">📂</div>
@@ -148,7 +137,7 @@ export function SnapshotPanel() {
 
       {/* Footer */}
       {snapshots.length > 0 && (
-        <div className="p-2 border-t border-slate-100 flex-shrink-0">
+        <div className="border-t border-slate-100 flex-shrink-0 -mx-4 px-2 pt-2">
           <button
             onClick={clearSnapshots}
             className="w-full text-[10px] px-2 py-1 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
@@ -157,6 +146,6 @@ export function SnapshotPanel() {
           </button>
         </div>
       )}
-    </div>
+    </PanelFrame>
   );
 }

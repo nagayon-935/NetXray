@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useConfigGen } from '../../hooks/useConfigGen';
 import { useSnapshotStore } from '../../stores/snapshot-store';
 import { useTopologyStore } from '../../stores/topology-store';
+import { PanelFrame } from './shared/PanelFrame';
 
 interface ConfigGenPanelProps {
   selectedNodeId: string | null;
@@ -9,7 +10,7 @@ interface ConfigGenPanelProps {
 
 export const ConfigGenPanel: React.FC<ConfigGenPanelProps> = ({ selectedNodeId }) => {
   const { currentSnapshotId, snapshots } = useSnapshotStore();
-  const { ir } = useTopologyStore();
+  const { ir, setActivePanel } = useTopologyStore();
   const { generateConfig, loading, error, result } = useConfigGen();
 
   useEffect(() => {
@@ -25,15 +26,16 @@ export const ConfigGenPanel: React.FC<ConfigGenPanelProps> = ({ selectedNodeId }
 
   if (!selectedNodeId) {
     return (
-      <div className="p-4 text-gray-500">
-        Select a node to generate configuration commands.
-      </div>
+      <PanelFrame title="Configuration Generator" onClose={() => setActivePanel(null)}>
+        <div className="text-gray-500">
+          Select a node to generate configuration commands.
+        </div>
+      </PanelFrame>
     );
   }
 
   return (
-    <div className="p-4 flex flex-col h-full">
-      <h3 className="text-lg font-bold mb-4">Configuration Generator</h3>
+    <PanelFrame title="Configuration Generator" onClose={() => setActivePanel(null)}>
       {loading && <div className="text-blue-500">Generating commands...</div>}
       {error && <div className="text-red-500">Error: {error}</div>}
       {result && (
@@ -56,6 +58,6 @@ export const ConfigGenPanel: React.FC<ConfigGenPanelProps> = ({ selectedNodeId }
           </div>
         </div>
       )}
-    </div>
+    </PanelFrame>
   );
 };

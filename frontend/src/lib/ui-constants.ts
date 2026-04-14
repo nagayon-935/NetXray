@@ -1,0 +1,5 @@
+export const CONVERGENCE_TICK_MS = 700;
+export const TIMELINE_DEFAULT_MS = 1000;
+export const TIMELINE_PRESET_SPEEDS_MS = [2000, 1000, 500, 250] as const;
+export const MAX_CONVERGENCE_TICKS = 20;
+export const WS_RECONNECT_DELAY_MS = 5_000;

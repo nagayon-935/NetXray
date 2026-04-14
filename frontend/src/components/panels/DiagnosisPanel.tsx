@@ -2,10 +2,12 @@ import React, { useEffect, useCallback } from 'react';
 import { useDiagnosis } from '../../hooks/useDiagnosis';
 import { useSnapshotStore } from '../../stores/snapshot-store';
 import { useTopologyStore } from '../../stores/topology-store';
+import { PanelFrame } from './shared/PanelFrame';
 
 export const DiagnosisPanel: React.FC = () => {
   const { currentSnapshotId, snapshots } = useSnapshotStore();
   const liveIR = useTopologyStore((s) => s.ir);
+  const setActivePanel = useTopologyStore((s) => s.setActivePanel);
   const { runDiagnosis, loading, error, issues } = useDiagnosis();
 
   // Resolve which IR to diagnose: prefer the selected snapshot, fall back to live IR
@@ -49,9 +51,8 @@ export const DiagnosisPanel: React.FC = () => {
   }
 
   return (
-    <div className="p-4 h-full flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold">Network Diagnosis</h3>
+    <PanelFrame title="Network Diagnosis" onClose={() => setActivePanel(null)} wide>
+      <div className="flex justify-end mb-2">
         <button
           onClick={handleRerun}
           disabled={loading || !activeIR}
@@ -115,6 +116,6 @@ export const DiagnosisPanel: React.FC = () => {
           </div>
         ))}
       </div>
-    </div>
+    </PanelFrame>
   );
 };

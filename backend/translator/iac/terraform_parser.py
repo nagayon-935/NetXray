@@ -1,5 +1,6 @@
 import hcl2
 from typing import Dict, Any, List
+from translator.iac.vendor_utils import map_vendor_from_kind
 
 
 def _strip_quotes(s: str) -> str:
@@ -30,9 +31,7 @@ def parse_terraform_to_ir(hcl_content: str) -> Dict[str, Any]:
                     kind_attr = attrs.get("kind", ["generic"])
                     kind = kind_attr[0] if isinstance(kind_attr, list) and len(kind_attr) > 0 else (kind_attr if isinstance(kind_attr, str) else "generic")
                     kind = _strip_quotes(kind)
-                    vendor = "generic"
-                    if "ceos" in kind or "arista" in kind: vendor = "arista"
-                    elif "frr" in kind: vendor = "frr"
+                    vendor = map_vendor_from_kind(kind)
 
                     nodes.append({
                         "id": node_id,

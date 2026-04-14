@@ -11,10 +11,13 @@ import { useSnapshotStore } from "../../stores/snapshot-store";
 import { useTopologyStore } from "../../stores/topology-store";
 import { useTimeline } from "../../hooks/useTimeline";
 import { diffSnapshots } from "../../stores/snapshot-store";
+import { PanelFrame } from "./shared/PanelFrame";
+import { TIMELINE_PRESET_SPEEDS_MS } from "../../lib/ui-constants";
 
 export function TimelinePanel() {
   const { snapshots, deleteSnapshot, clearSnapshots } = useSnapshotStore();
   const loadIR = useTopologyStore((s) => s.loadIR);
+  const setActivePanel = useTopologyStore((s) => s.setActivePanel);
 
   // When restoring, re-load the IR into the topology store
   const handleRestore = useCallback(
@@ -41,13 +44,15 @@ export function TimelinePanel() {
 
   if (snapshots.length === 0) {
     return (
-      <div className="w-80 bg-white border-l border-slate-200 p-4 space-y-2 text-sm text-slate-400">
-        <p>No snapshots yet.</p>
-        <p className="text-xs">
-          Snapshots are saved automatically when you toggle link states, or manually via the
-          camera button in the toolbar.
-        </p>
-      </div>
+      <PanelFrame title="Timeline" onClose={() => setActivePanel(null)}>
+        <div className="space-y-2 text-sm text-slate-400">
+          <p>No snapshots yet.</p>
+          <p className="text-xs">
+            Snapshots are saved automatically when you toggle link states, or manually via the
+            camera button in the toolbar.
+          </p>
+        </div>
+      </PanelFrame>
     );
   }
 
@@ -56,14 +61,10 @@ export function TimelinePanel() {
   const diff = currentSnap && prevSnap ? diffSnapshots(prevSnap.ir, currentSnap.ir) : null;
 
   return (
-    <div className="w-80 bg-white border-l border-slate-200 flex flex-col h-full text-xs">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
-        <span className="font-semibold text-slate-700">
-          Timeline
-          <span className="ml-1.5 text-slate-400 font-normal">
-            ({snapshots.length} snapshot{snapshots.length !== 1 ? "s" : ""})
-          </span>
+    <PanelFrame title="Timeline" onClose={() => setActivePanel(null)}>
+      <div className="flex justify-between items-center mb-2">
+        <span className="text-slate-500 text-xs">
+          ({snapshots.length} snapshot{snapshots.length !== 1 ? "s" : ""})
         </span>
         {snapshots.length > 0 && (
           <button
@@ -80,7 +81,7 @@ export function TimelinePanel() {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="space-y-3 text-xs">
         {/* Live / Restore indicator */}
         {isRestoring ? (
           <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
@@ -171,7 +172,7 @@ export function TimelinePanel() {
         {/* Speed selector */}
         <div className="flex items-center justify-center gap-2 text-[10px] text-slate-500">
           <span>Speed:</span>
-          {[2000, 1000, 500, 250].map((ms) => (
+          {TIMELINE_PRESET_SPEEDS_MS.map((ms) => (
             <button
               key={ms}
               onClick={() => setIntervalMs(ms)}
@@ -268,6 +269,6 @@ export function TimelinePanel() {
           </div>
         </div>
       </div>
-    </div>
+    </PanelFrame>
   );
 }

@@ -9,6 +9,7 @@
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import type { NetXrayIR } from "../../types/netxray-ir";
 import type { ViewDef, ViewResult } from "./index";
+import { COLORS } from "../colors";
 
 function irNodeToFlowNode(node: NetXrayIR["topology"]["nodes"][number]): FlowNode {
   return {
@@ -32,7 +33,7 @@ function irLinkToFlowEdge(link: NetXrayIR["topology"]["links"][number]): FlowEdg
       targetInterface: link.target.interface,
       isOnPath: false,
     },
-    style: link.state === "down" ? { stroke: "#ef4444", strokeDasharray: "5,5" } : undefined,
+    style: link.state === "down" ? { stroke: COLORS.DOWN, strokeDasharray: "5,5" } : undefined,
   };
 }
 

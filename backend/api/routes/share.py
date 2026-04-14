@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from api.config import settings
+from constants import SHARE_ID_LENGTH, SHARE_MAX_PAYLOAD_BYTES
 
 router = APIRouter(prefix="/share", tags=["share"])
 
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/share", tags=["share"])
 SHARE_DB_PATH: Path = settings.data_dir / "shares.json"
 
 # 8-char hex share ID — only characters from a UUID hex string
-_SHARE_ID_RE = re.compile(r"^[0-9a-f]{8}$")
+_SHARE_ID_RE = re.compile(rf"^[0-9a-f]{{{SHARE_ID_LENGTH}}}$")
 
 
 class ShareRequest(BaseModel):
@@ -54,10 +55,10 @@ async def create_share(req: ShareRequest) -> ShareResponse:
         raise HTTPException(status_code=400, detail="Share state must not be empty")
 
     # Prevent abuse: cap payload size at 2 MB (uncompressed base64)
-    if len(req.state) > 2 * 1024 * 1024:
+    if len(req.state) > SHARE_MAX_PAYLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Share payload too large (max 2 MB)")
 
-    share_id = str(uuid.uuid4()).replace("-", "")[:8]
+    share_id = str(uuid.uuid4()).replace("-", "")[:SHARE_ID_LENGTH]
     db = _load_db()
     db[share_id] = req.state
     _save_db(db)

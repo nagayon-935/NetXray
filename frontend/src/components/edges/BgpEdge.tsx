@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react";
+import { COLORS } from "../../lib/colors";
 
 interface BgpEdgeData {
   sourceAs: number;
@@ -35,7 +36,7 @@ function BgpEdgeComponent({
     curvature: 0.55,
   });
 
-  const strokeColor = isEstablished ? "#10b981" : "#f59e0b";
+  const strokeColor = isEstablished ? COLORS.UP : COLORS.WARN;
 
   return (
     <>

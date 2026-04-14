@@ -1,5 +1,7 @@
 from typing import Any, List, Dict
 
+from translator.ir_helpers import get_ir_nodes, get_ir_links, get_node_interfaces
+
 # RFC 9234 valid complementary BGP role pairs
 _VALID_ROLE_PAIRS = {
     ("provider", "customer"),
@@ -33,7 +35,7 @@ def check_bgp_role_mismatches(ir: Dict[str, Any]) -> List[DiagnosisIssue]:
     Valid pairs: provider↔customer, peer↔peer, rs↔rs-client.
     """
     issues: List[DiagnosisIssue] = []
-    nodes = ir.get("topology", {}).get("nodes", [])
+    nodes = get_ir_nodes(ir)
     node_map: Dict[str, Any] = {n["id"]: n for n in nodes}
 
     # Track already-reported pairs to avoid duplicate warnings in both directions
@@ -134,13 +136,9 @@ def check_acl_best_practices(ir: Dict[str, Any]) -> List[DiagnosisIssue]:
 def _nodes_using_acl(ir: Dict[str, Any], acl_name: str) -> List[str]:
     """Return IDs of nodes that reference acl_name on any interface."""
     node_ids: List[str] = []
-    for node in ir.get("topology", {}).get("nodes", []):
-        ifaces = node.get("interfaces", {})
-        if isinstance(ifaces, dict):
-            iface_iter = ifaces.values()
-        else:
-            iface_iter = ifaces
-        for iface in iface_iter:
+    for node in get_ir_nodes(ir):
+        ifaces = get_node_interfaces(node)
+        for iface in ifaces.values():
             if iface.get("acl_in") == acl_name or iface.get("acl_out") == acl_name:
                 node_ids.append(node["id"])
                 break
@@ -153,15 +151,9 @@ def check_security_best_practices(ir: Dict[str, Any]) -> List[DiagnosisIssue]:
     Interfaces are stored as a dict keyed by interface name in the IR.
     """
     issues: List[DiagnosisIssue] = []
-    for node in ir.get("topology", {}).get("nodes", []):
-        ifaces = node.get("interfaces", {})
-        # Support both dict (current IR) and legacy list format
-        if isinstance(ifaces, dict):
-            iface_items = ifaces.items()
-        else:
-            iface_items = ((i.get("name", "unknown"), i) for i in ifaces)
-
-        for iface_name, iface in iface_items:
+    for node in get_ir_nodes(ir):
+        ifaces = get_node_interfaces(node)
+        for iface_name, iface in ifaces.items():
             if iface.get("ip") and not iface.get("acl_in"):
                 issues.append(
                     DiagnosisIssue(

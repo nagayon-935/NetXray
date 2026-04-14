@@ -2,11 +2,13 @@ import { useState } from "react";
 import { useTopologyStore } from "../../stores/topology-store";
 import { getEngine } from "../../engine/wasm-engine";
 import type { PacketHeader } from "../../engine/types";
+import { PanelFrame } from "./shared/PanelFrame";
 
 export function PacketSimPanel() {
   const ir = useTopologyStore((s) => s.ir);
   const packetPath = useTopologyStore((s) => s.packetPath);
   const setPacketPath = useTopologyStore((s) => s.setPacketPath);
+  const setActivePanel = useTopologyStore((s) => s.setActivePanel);
 
   const [srcIp, setSrcIp] = useState("");
   const [dstIp, setDstIp] = useState("");
@@ -30,12 +32,8 @@ export function PacketSimPanel() {
   };
 
   return (
-    <div className="w-80 bg-white border-l border-slate-200 overflow-y-auto h-full">
-      <div className="p-3 border-b border-slate-200 bg-slate-50">
-        <h2 className="font-semibold text-sm text-slate-800">Packet Simulation</h2>
-      </div>
-
-      <div className="p-3 space-y-3">
+    <PanelFrame title="Packet Simulation" onClose={() => setActivePanel(null)}>
+      <div className="space-y-3">
         <div>
           <label className="block text-xs text-slate-500 mb-1">Source IP</label>
           <input
@@ -100,7 +98,7 @@ export function PacketSimPanel() {
       </div>
 
       {packetPath && (
-        <div className="p-3 border-t border-slate-100">
+        <div className="border-t border-slate-100 -mx-4 px-3 pt-3">
           <div className="flex items-center gap-2 mb-2">
             <span
               className={`text-xs font-semibold px-2 py-0.5 rounded ${
@@ -154,6 +152,6 @@ export function PacketSimPanel() {
           </div>
         </div>
       )}
-    </div>
+    </PanelFrame>
   );
 }

@@ -11,6 +11,7 @@ import { useCallback } from "react";
 import { useTopologyStore } from "../../stores/topology-store";
 import { useWhatIfStore } from "../../stores/whatif-store";
 import type { FailureSpec } from "../../engine/types";
+import { PanelFrame } from "./shared/PanelFrame";
 
 export function WhatIfPanel() {
   const ir = useTopologyStore((s) => s.ir);
@@ -78,9 +79,9 @@ export function WhatIfPanel() {
 
   if (!ir) {
     return (
-      <div className="w-80 bg-white border-l border-slate-200 p-4 text-slate-400 text-sm">
-        Load a topology first to run What-If analysis.
-      </div>
+      <PanelFrame title="What-If" onClose={() => setActivePanel(null)}>
+        <div className="text-slate-400 text-sm">Load a topology first to run What-If analysis.</div>
+      </PanelFrame>
     );
   }
 
@@ -88,7 +89,7 @@ export function WhatIfPanel() {
 
   if (!isActive) {
     return (
-      <div className="w-80 bg-white border-l border-slate-200 p-4 space-y-3">
+      <PanelFrame title="What-If" onClose={() => setActivePanel(null)}>
         <p className="text-sm text-slate-600">
           Simulate link or node failures and see how routing changes without affecting
           the live topology.
@@ -99,7 +100,7 @@ export function WhatIfPanel() {
         >
           Start What-If Session
         </button>
-      </div>
+      </PanelFrame>
     );
   }
 
@@ -124,23 +125,8 @@ export function WhatIfPanel() {
       : [];
 
   return (
-    <div className="w-80 bg-white border-l border-slate-200 flex flex-col h-full text-xs">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-orange-50 border-b border-orange-200">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
-          <span className="font-semibold text-orange-700">What-If Mode</span>
-        </div>
-        <button
-          onClick={handleDeactivate}
-          className="text-slate-400 hover:text-slate-600 text-xs"
-          title="Exit What-If mode"
-        >
-          ✕ Exit
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto space-y-3 p-3">
+    <PanelFrame title="What-If Mode" onClose={handleDeactivate}>
+      <div className="space-y-3 text-xs">
         {/* Failure scenario builder */}
         <section>
           <div className="flex items-center justify-between mb-1.5">
@@ -330,6 +316,6 @@ export function WhatIfPanel() {
           </section>
         )}
       </div>
-    </div>
+    </PanelFrame>
   );
 }

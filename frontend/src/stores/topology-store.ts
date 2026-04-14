@@ -5,6 +5,7 @@ import type { PacketPath, ShadowedRule } from "../engine/types";
 import { getEngine } from "../engine/wasm-engine";
 import { useSnapshotStore } from "./snapshot-store";
 import { applyPatch } from "../lib/ir-patch";
+import { COLORS } from "../lib/colors";
 
 export type EngineStatus = "loading" | "wasm" | "mock";
 
@@ -64,7 +65,7 @@ function irLinkToFlowEdge(link: Link, packetPath: PacketPath | null): FlowEdge {
       targetInterface: link.target.interface,
       isOnPath: isOnPath ?? false,
     },
-    style: link.state === "down" ? { stroke: "#ef4444", strokeDasharray: "5,5" } : undefined,
+    style: link.state === "down" ? { stroke: COLORS.DOWN, strokeDasharray: "5,5" } : undefined,
   };
 }
 

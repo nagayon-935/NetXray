@@ -9,6 +9,7 @@ import type {
   FailureSpec,
   ConvergenceStep,
 } from "./types";
+import { MAX_CONVERGENCE_TICKS } from "../lib/ui-constants";
 
 interface Graph {
   adjacency: Map<string, { neighbor: string; link: Link; cost: number }[]>;
@@ -257,51 +258,7 @@ class MockEngine implements SimEngine {
 
   private dijkstra(srcId: string, dstId: string): string[] | null {
     if (!this.graph) return null;
-
-    const dist = new Map<string, number>();
-    const prev = new Map<string, string | null>();
-    const visited = new Set<string>();
-
-    for (const nodeId of this.graph.nodes.keys()) {
-      dist.set(nodeId, Infinity);
-      prev.set(nodeId, null);
-    }
-    dist.set(srcId, 0);
-
-    while (true) {
-      let minNode: string | null = null;
-      let minDist = Infinity;
-      for (const [nodeId, d] of dist) {
-        if (!visited.has(nodeId) && d < minDist) {
-          minDist = d;
-          minNode = nodeId;
-        }
-      }
-      if (minNode === null) break;
-      visited.add(minNode);
-
-      if (minNode === dstId) break;
-
-      const neighbors = this.graph.adjacency.get(minNode) ?? [];
-      for (const { neighbor, cost } of neighbors) {
-        if (visited.has(neighbor)) continue;
-        const newDist = minDist + cost;
-        if (newDist < dist.get(neighbor)!) {
-          dist.set(neighbor, newDist);
-          prev.set(neighbor, minNode);
-        }
-      }
-    }
-
-    if (dist.get(dstId) === Infinity) return null;
-
-    const path: string[] = [];
-    let current: string | null = dstId;
-    while (current !== null) {
-      path.unshift(current);
-      current = prev.get(current) ?? null;
-    }
-    return path;
+    return this.dijkstraCore(this.graph, srcId, dstId);
   }
 
   private findLinkBetween(nodeA: string, nodeB: string): Link | null {
@@ -324,12 +281,8 @@ class MockEngine implements SimEngine {
   simulateMultiFailure(failures: FailureSpec[]): RoutingUpdate {
     if (!this.currentIR) return { affected_nodes: [], updated_paths: {} };
 
-    const excludedNodes = new Set<string>(
-      failures.filter((f) => f.kind === "node").map((f) => f.id),
-    );
-    const excludedLinks = new Set<string>(
-      failures.filter((f) => f.kind === "link").map((f) => f.id),
-    );
+    const excludedNodes = MockEngine.nodeFailureIds(failures);
+    const excludedLinks = MockEngine.linkFailureIds(failures);
 
     // Include both endpoints of each failed link in affected_nodes
     const affectedSet = new Set<string>(excludedNodes);
@@ -402,12 +355,8 @@ class MockEngine implements SimEngine {
   simulateConvergence(failures: FailureSpec[]): ConvergenceStep[] {
     if (!this.currentIR) return [];
 
-    const excludedNodes = new Set<string>(
-      failures.filter((f) => f.kind === "node").map((f) => f.id),
-    );
-    const excludedLinks = new Set<string>(
-      failures.filter((f) => f.kind === "link").map((f) => f.id),
-    );
+    const excludedNodes = MockEngine.nodeFailureIds(failures);
+    const excludedLinks = MockEngine.linkFailureIds(failures);
 
     const allNodes = this.currentIR.topology.nodes
       .map((n) => n.id)
@@ -448,7 +397,7 @@ class MockEngine implements SimEngine {
     const visited = new Set<string>(failurePoints);
     let tick = 1;
 
-    while (frontier.length > 0 && tick <= 20) {
+    while (frontier.length > 0 && tick <= MAX_CONVERGENCE_TICKS) {
       const nextFrontier: string[] = [];
       const tickUpdates: RoutingUpdate["updated_paths"] = {};
 
@@ -513,12 +462,8 @@ class MockEngine implements SimEngine {
 
   /** Return a cloned IR with the given failures applied. */
   private applyFailures(ir: NetXrayIR, failures: FailureSpec[]): NetXrayIR {
-    const excludedNodes = new Set<string>(
-      failures.filter((f) => f.kind === "node").map((f) => f.id),
-    );
-    const excludedLinks = new Set<string>(
-      failures.filter((f) => f.kind === "link").map((f) => f.id),
-    );
+    const excludedNodes = MockEngine.nodeFailureIds(failures);
+    const excludedLinks = MockEngine.linkFailureIds(failures);
 
     return {
       ...ir,
@@ -538,24 +483,16 @@ class MockEngine implements SimEngine {
 
   /** Dijkstra on an arbitrary Graph (by node ID, not IP). */
   private dijkstraWithGraph(graph: Graph, srcId: string, dstId: string): string[] | null {
-    // If dst is a full IP, find the node that owns it
-    let resolvedDst = dstId;
-    if (dstId.includes(".")) {
-      // It looks like an IP — find the owning node
-      for (const [nodeId, node] of graph.nodes) {
-        if (!node.interfaces) continue;
-        for (const iface of Object.values(node.interfaces)) {
-          if (iface.ip && iface.ip.split("/")[0] === dstId) {
-            resolvedDst = nodeId;
-            break;
-          }
-        }
-        if (resolvedDst !== dstId) break;
-      }
-      // Still an IP → not found
-      if (resolvedDst === dstId && dstId.includes(".")) return null;
-    }
+    const resolvedDst = this.resolveNodeId(graph, dstId);
+    if (resolvedDst === null) return null;
+    return this.dijkstraCore(graph, srcId, resolvedDst);
+  }
 
+  private dijkstraCore(
+    graph: Graph,
+    srcId: string,
+    dstId: string,  // always a node ID at this point
+  ): string[] | null {
     const dist = new Map<string, number>();
     const prev = new Map<string, string | null>();
     const visited = new Set<string>();
@@ -577,7 +514,7 @@ class MockEngine implements SimEngine {
       }
       if (minNode === null) break;
       visited.add(minNode);
-      if (minNode === resolvedDst) break;
+      if (minNode === dstId) break;
 
       for (const { neighbor, cost } of graph.adjacency.get(minNode) ?? []) {
         if (visited.has(neighbor)) continue;
@@ -589,15 +526,34 @@ class MockEngine implements SimEngine {
       }
     }
 
-    if ((dist.get(resolvedDst) ?? Infinity) === Infinity) return null;
+    if ((dist.get(dstId) ?? Infinity) === Infinity) return null;
 
     const path: string[] = [];
-    let current: string | null = resolvedDst;
+    let current: string | null = dstId;
     while (current !== null) {
       path.unshift(current);
       current = prev.get(current) ?? null;
     }
     return path;
+  }
+
+  private resolveNodeId(graph: Graph, idOrIp: string): string | null {
+    if (!idOrIp.includes(".")) return idOrIp;  // already a node ID
+    for (const [nodeId, node] of graph.nodes) {
+      if (!node.interfaces) continue;
+      for (const iface of Object.values(node.interfaces)) {
+        if (iface.ip && iface.ip.split("/")[0] === idOrIp) return nodeId;
+      }
+    }
+    return null;  // IP not found
+  }
+
+  private static nodeFailureIds(failures: FailureSpec[]): Set<string> {
+    return new Set(failures.filter((f) => f.kind === "node").map((f) => f.id));
+  }
+
+  private static linkFailureIds(failures: FailureSpec[]): Set<string> {
+    return new Set(failures.filter((f) => f.kind === "link").map((f) => f.id));
   }
 }
 

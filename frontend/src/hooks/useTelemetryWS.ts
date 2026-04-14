@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useTopologyStore } from "../stores/topology-store";
+import { WS_RECONNECT_DELAY_MS } from "../lib/ui-constants";
 
 /**
  * Opens a WebSocket to `/api/ws/topology/{topologyName}` and applies
@@ -52,7 +53,7 @@ export function useTelemetryWS(topologyName: string | undefined) {
         if (!active) return; // cleanup already ran — don't reconnect
         if (!event.wasClean) {
           console.debug(`[TelemetryWS] disconnected (code ${event.code}), reconnecting in 5 s…`);
-          reconnectTimer = setTimeout(openConnection, 5_000);
+          reconnectTimer = setTimeout(openConnection, WS_RECONNECT_DELAY_MS);
         }
       };
 

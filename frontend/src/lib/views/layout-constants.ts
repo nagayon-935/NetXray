@@ -1,0 +1,10 @@
+export const CHILD_W = 190;
+export const CHILD_H = 70;
+export const CHILD_COLS = 2;
+export const CHILD_GAP_X = 20;
+export const CHILD_GAP_Y = 20;
+export const GROUP_PAD_X = 30;
+export const GROUP_PAD_Y = 50;
+export const GROUP_GAP_X = 80;
+export const GROUP_GAP_Y = 80;
+export const GROUPS_PER_ROW = 3;

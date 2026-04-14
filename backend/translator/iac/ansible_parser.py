@@ -1,5 +1,6 @@
 import yaml
 from typing import Dict, Any
+from translator.iac.vendor_utils import map_vendor_from_os
 
 def parse_ansible_inventory(inventory_content: str) -> Dict[str, Any]:
     """
@@ -15,9 +16,7 @@ def parse_ansible_inventory(inventory_content: str) -> Dict[str, Any]:
         # Format: hosts: { node1: { var1: val1 } }
         hosts = block.get("hosts", {})
         for node_id, attrs in hosts.items():
-            vendor = attrs.get("ansible_network_os", "generic")
-            if "eos" in vendor: vendor = "arista"
-            elif "frr" in vendor: vendor = "frr"
+            vendor = map_vendor_from_os(attrs.get("ansible_network_os", "generic"))
             
             nodes.append({
                 "id": node_id,
