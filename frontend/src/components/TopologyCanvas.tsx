@@ -46,7 +46,10 @@ export function TopologyCanvas() {
   const selectNode = useTopologyStore((s) => s.selectNode);
   const activePanel = useTopologyStore((s) => s.activePanel);
   const heatmapEnabled = useLayerStore((s) => s.layers.heatmap);
-  useTelemetryWS((ir as any)?.topology_name || "default");
+  // Connect telemetry WebSocket only when an IR is loaded.
+  // "default" is a placeholder topology name — the backend mock loop
+  // broadcasts to all WS clients keyed by this name.
+  useTelemetryWS(ir ? "default" : undefined);
 
   const activeViewId = useViewStore((s) => s.activeView);
   const activeView = VIEW_REGISTRY[activeViewId];

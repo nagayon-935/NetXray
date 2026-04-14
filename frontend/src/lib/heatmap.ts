@@ -25,7 +25,8 @@ export const HEATMAP_WIDTH = {
 };
 
 export function getHeatmapStyle(bps: number, maxBps: number): HeatmapStyle {
-  const ratio = Math.min(1, bps / maxBps);
+  // Guard against division by zero — return "zero traffic" style
+  const ratio = maxBps > 0 ? Math.min(1, bps / maxBps) : 0;
   
   let color = HEATMAP_COLORS.LOW;
   if (ratio > HEATMAP_THRESHOLDS.HIGH) {

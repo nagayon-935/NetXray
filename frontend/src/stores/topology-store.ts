@@ -139,7 +139,8 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
     if (!ir) return;
     const updatedIR = applyPatch(ir, patches);
     set({ ir: updatedIR });
-    // After patching telemetry, we might need to re-generate flow elements if heatmap is active
-    get().updateFlowElements();
+    // Telemetry patches only update traffic counters — HeatmapEdge reads
+    // directly from the IR store so no flowEdge rebuild is needed.
+    // (updateFlowElements omitted here to avoid unnecessary re-renders.)
   },
 }));
