@@ -1,6 +1,7 @@
 import logging
 from fastapi import APIRouter, Response
 from prometheus_client import Gauge, generate_latest, CONTENT_TYPE_LATEST
+from backend.api.routes.topology import get_current_ir
 
 router = APIRouter(tags=["metrics"])
 

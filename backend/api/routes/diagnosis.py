@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from typing import Any, Dict
-from diagnosis.analyzer import DiagnosisEngine
+from backend.diagnosis.analyzer import DiagnosisEngine
 
 router = APIRouter(prefix="/diagnose", tags=["diagnosis"])
 engine = DiagnosisEngine()

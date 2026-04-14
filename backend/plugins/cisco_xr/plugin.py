@@ -1,5 +1,5 @@
 # Skeleton for Cisco XR
-from plugins.plugin_base import VendorPlugin
+from backend.plugins.plugin_base import VendorPlugin
 
 class CiscoXRDriver:
     @classmethod

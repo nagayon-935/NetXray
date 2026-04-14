@@ -1,5 +1,5 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from collector.telemetry_manager import telemetry_manager
+from backend.collector.telemetry_manager import telemetry_manager
 
 router = APIRouter(prefix="/ws", tags=["websocket"])
 

@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, Literal
-from translator.iac.terraform_parser import parse_terraform_to_ir
-from translator.iac.ansible_parser import parse_ansible_inventory
-from translator.iac.clab_exporter import export_to_clab
+from backend.translator.iac.terraform_parser import parse_terraform_to_ir
+from backend.translator.iac.ansible_parser import parse_ansible_inventory
+from backend.translator.iac.clab_exporter import export_to_clab
 
 router = APIRouter(prefix="/iac", tags=["iac"])
 

@@ -1,7 +1,7 @@
 from .driver import AristaDriver
 from .parser import AristaParser
 from .config_generator import AristaConfigGenerator
-from plugins.plugin_base import VendorPlugin
+from backend.plugins.plugin_base import VendorPlugin
 
 plugin = VendorPlugin()
 plugin.vendor_name = "arista"

@@ -1,5 +1,5 @@
 # Skeleton for Juniper Junos
-from plugins.plugin_base import VendorPlugin
+from backend.plugins.plugin_base import VendorPlugin
 
 class JuniperJunosDriver:
     @classmethod

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from api.schemas import ConfigGenerateRequest
-from plugins import get_plugin
+from backend.api.schemas import ConfigGenerateRequest
+from backend.plugins import get_plugin
 
 router = APIRouter(prefix="/config", tags=["config"])
 

@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from api.config import settings
+from backend.api.config import settings
 
 router = APIRouter(prefix="/share", tags=["share"])
 
@@ -14,7 +14,7 @@ class ShareRequest(BaseModel):
     state: str  # Compressed base64 string
 
 class ShareResponse(BaseModel):
-    id: str
+    id: string
 
 def load_db():
     if not SHARE_DB_PATH.exists():
