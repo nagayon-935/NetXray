@@ -9,11 +9,11 @@ interface ConfigGenPanelProps {
 
 export const ConfigGenPanel: React.FC<ConfigGenPanelProps> = ({ selectedNodeId }) => {
   const { currentSnapshotId, snapshots } = useSnapshotStore();
-  const { topology } = useTopologyStore();
+  const { ir } = useTopologyStore();
   const { generateConfig, loading, error, result } = useConfigGen();
 
   useEffect(() => {
-    if (selectedNodeId && currentSnapshotId && topology) {
+    if (selectedNodeId && currentSnapshotId && ir) {
       const currentSnap = snapshots.find(s => s.id === currentSnapshotId);
       const baseSnap = snapshots[0]; // For demo, compare with the first snapshot
 
@@ -21,7 +21,7 @@ export const ConfigGenPanel: React.FC<ConfigGenPanelProps> = ({ selectedNodeId }
         generateConfig(baseSnap.ir, currentSnap.ir, selectedNodeId);
       }
     }
-  }, [selectedNodeId, currentSnapshotId, topology, snapshots]);
+  }, [selectedNodeId, currentSnapshotId, ir, snapshots]);
 
   if (!selectedNodeId) {
     return (

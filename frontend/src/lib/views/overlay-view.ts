@@ -45,8 +45,6 @@ function derive(ir: NetXrayIR): ViewResult {
   const nodes: FlowNode[] = [];
   const edges: FlowEdge[] = [];
 
-  const nodeMap = new Map(ir.topology.nodes.map((n) => [n.id, n]));
-
   // Classify nodes
   const overlayNodes: string[] = [];
   const underlayNodes: string[] = [];

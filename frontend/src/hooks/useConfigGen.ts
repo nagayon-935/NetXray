@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NetXrayIR } from '../types/netxray-ir';
+import type { NetXrayIR } from '../types/netxray-ir';
 
 interface ConfigGenResponse {
   node_id: string;

@@ -46,7 +46,7 @@ export function TopologyCanvas() {
   const selectNode = useTopologyStore((s) => s.selectNode);
   const activePanel = useTopologyStore((s) => s.activePanel);
   const heatmapEnabled = useLayerStore((s) => s.layers.heatmap);
-  useTelemetryWS(ir?.topology_name || "default");
+  useTelemetryWS((ir as any)?.topology_name || "default");
 
   const activeViewId = useViewStore((s) => s.activeView);
   const activeView = VIEW_REGISTRY[activeViewId];
