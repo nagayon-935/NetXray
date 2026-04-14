@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { NetXrayIR } from '../types/netxray-ir';
+import { NetXrayIR } from '../types/netxray-ir';
 
 export interface DiagnosisIssue {
   category: string;

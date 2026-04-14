@@ -2,7 +2,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import List, Dict
-from collector.telemetry_manager import telemetry_manager
+from backend.collector.telemetry_manager import telemetry_manager
 
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 

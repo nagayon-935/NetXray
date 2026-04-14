@@ -1,5 +1,5 @@
 from typing import Any
-from translator.parser_base import InterfaceData, AclRuleData
+from backend.translator.parser_base import InterfaceData, AclRuleData
 
 class BaseConfigGenerator:
     vendor_name: str = "base"

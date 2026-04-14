@@ -1,5 +1,5 @@
 from typing import Protocol, TypedDict, Any
-from translator.parser_base import InterfaceData, RouteData, AclRuleData
+from backend.translator.parser_base import InterfaceData, RouteData, AclRuleData
 
 class VendorConfigGenerator(Protocol):
     vendor_name: str

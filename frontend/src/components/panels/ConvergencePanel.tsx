@@ -36,7 +36,6 @@ export function ConvergencePanel() {
 
   const startPlay = useCallback(() => {
     if (totalTicks === 0) return;
-    stopPlay(); // always clear any existing interval before creating a new one
     setIsPlaying(true);
     playIntervalRef.current = setInterval(() => {
       setCurrentTick((t) => {

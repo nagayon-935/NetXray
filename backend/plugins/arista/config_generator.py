@@ -1,5 +1,5 @@
 from typing import Any
-from plugins.base_config_generator import BaseConfigGenerator
+from backend.plugins.base_config_generator import BaseConfigGenerator
 
 class AristaConfigGenerator(BaseConfigGenerator):
     vendor_name = "arista"

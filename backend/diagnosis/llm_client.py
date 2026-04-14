@@ -1,7 +1,7 @@
 import httpx
 import logging
 from typing import Any, Dict, List
-from api.config import settings
+from backend.api.config import settings
 
 logger = logging.getLogger(__name__)
 
