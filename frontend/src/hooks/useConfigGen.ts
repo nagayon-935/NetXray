@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import type { NetXrayIR } from '../types/netxray-ir';
 
 interface ConfigGenResponse {
@@ -12,7 +12,7 @@ export function useConfigGen() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ConfigGenResponse | null>(null);
 
-  const generateConfig = async (baseIR: NetXrayIR, targetIR: NetXrayIR, nodeId: string) => {
+  const generateConfig = useCallback(async (baseIR: NetXrayIR, targetIR: NetXrayIR, nodeId: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -32,12 +32,12 @@ export function useConfigGen() {
 
       const data = await response.json();
       setResult(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // stable reference
 
   return { generateConfig, loading, error, result };
 }

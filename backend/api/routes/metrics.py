@@ -1,6 +1,8 @@
 import logging
 from fastapi import APIRouter, Response
 from prometheus_client import Gauge, generate_latest, CONTENT_TYPE_LATEST
+from api.state import get_current_ir
+from diagnosis.rules import check_acl_best_practices
 
 router = APIRouter(tags=["metrics"])
 
@@ -17,9 +19,8 @@ async def metrics():
     """
     Expose Prometheus metrics by deriving them from the current IR state.
     """
-    # Try to get the latest IR from a known source (e.g., active topology in memory)
-    # This is a conceptual implementation.
-    ir = None # Placeholder for getting live IR
+    # Get the latest IR from global in-memory state (set when a topology is loaded/saved)
+    ir = get_current_ir()
     
     # Example derivation (mocked if ir is None)
     if ir:
@@ -36,8 +37,22 @@ async def metrics():
         # 2. Links Down
         down_count = sum(1 for l in ir.get("topology", {}).get("links", []) if l.get("state") == "down")
         links_down.set(down_count)
-        
-        # 3. Reachability failures (mock)
+
+        # 3. ACL shadowed-rule count (derived from diagnosis rules)
+        acl_issues = check_acl_best_practices(ir)
+        # Count shadowing issues per ACL name (extract from message)
+        acl_shadow_counts: dict[str, int] = {}
+        for issue in acl_issues:
+            # Message format: "ACL '<name>' has ..."
+            try:
+                acl_name = issue.message.split("'")[1]
+            except IndexError:
+                acl_name = "unknown"
+            acl_shadow_counts[acl_name] = acl_shadow_counts.get(acl_name, 0) + 1
+        for acl_name, count in acl_shadow_counts.items():
+            acl_shadow_count.labels(acl=acl_name).set(count)
+
+        # 4. Reachability failures (rule-based check placeholder)
         reachability_failures.set(0)
     else:
         # Sample data when no IR is loaded

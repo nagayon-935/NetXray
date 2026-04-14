@@ -12,17 +12,17 @@ async def generate_config(req: ConfigGenerateRequest):
     """
     node_id = req.node_id
     
-    # Find the node in both IRs
-    base_nodes = {n["id"]: n for n in req.base_ir.get("nodes", [])}
-    target_nodes = {n["id"]: n for n in req.target_ir.get("nodes", [])}
-    
+    # Find the node in both IRs — IR structure is { topology: { nodes: [...] } }
+    base_nodes = {n["id"]: n for n in req.base_ir.get("topology", {}).get("nodes", [])}
+    target_nodes = {n["id"]: n for n in req.target_ir.get("topology", {}).get("nodes", [])}
+
     if node_id not in target_nodes:
         raise HTTPException(status_code=404, detail=f"Node {node_id} not found in target IR")
-    
+
     target_node = target_nodes[node_id]
-    base_node = base_nodes.get(node_id, {"id": node_id, "interfaces": [], "acls": {}})
-    
-    vendor = target_node.get("vendor", "frr")
+    base_node = base_nodes.get(node_id, {"id": node_id, "interfaces": {}})
+
+    vendor = target_node.get("vendor", "generic")  # match schema default
     plugin = get_plugin(vendor)
     if not plugin:
         raise HTTPException(status_code=400, detail=f"Unsupported vendor: {vendor}")

@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 
 from api.config import settings
 from api.schemas import SaveResponse, TopologyListResponse, TopologyMeta
+from api.state import set_current_ir
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -50,7 +51,9 @@ def get_topology(name: str) -> Any:
     path = _topo_path(name)
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Topology '{name}' not found")
-    return json.loads(path.read_text())
+    ir = json.loads(path.read_text())
+    set_current_ir(ir)
+    return ir
 
 
 @router.post("/topology/{name}", response_model=SaveResponse)
@@ -58,6 +61,7 @@ def save_topology(name: str, ir: dict[str, Any]) -> SaveResponse:
     _validate_ir(ir)
     path = _topo_path(name)
     path.write_text(json.dumps(ir, indent=2))
+    set_current_ir(ir)
     return SaveResponse(status="saved", name=name)
 
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import type { NetXrayIR } from '../types/netxray-ir';
 
 export interface DiagnosisIssue {
@@ -13,7 +13,7 @@ export function useDiagnosis() {
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<DiagnosisIssue[]>([]);
 
-  const runDiagnosis = async (ir: NetXrayIR) => {
+  const runDiagnosis = useCallback(async (ir: NetXrayIR) => {
     setLoading(true);
     setError(null);
     try {
@@ -29,12 +29,12 @@ export function useDiagnosis() {
 
       const data = await response.json();
       setIssues(data.issues);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // stable reference — no external deps
 
   return { runDiagnosis, loading, error, issues };
 }
