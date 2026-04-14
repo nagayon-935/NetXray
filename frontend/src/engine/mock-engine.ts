@@ -556,9 +556,6 @@ class MockEngine implements SimEngine {
       if (resolvedDst === dstId && dstId.includes(".")) return null;
     }
 
-    // Guard: if srcId was excluded from the modified graph, there is no path.
-    if (!graph.nodes.has(srcId)) return null;
-
     const dist = new Map<string, number>();
     const prev = new Map<string, string | null>();
     const visited = new Set<string>();

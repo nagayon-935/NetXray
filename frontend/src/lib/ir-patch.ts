@@ -1,4 +1,4 @@
-import type { NetXrayIR } from "../types/netxray-ir";
+import { NetXrayIR } from "../types/netxray-ir";
 
 export interface JsonPatchOperation {
   op: 'replace' | 'add' | 'remove';

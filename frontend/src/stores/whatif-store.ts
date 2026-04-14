@@ -38,8 +38,8 @@ export interface WhatIfState {
   /** Routing update produced by the most recent `runSimulation()` call. */
   routingUpdate: RoutingUpdate | null;
 
-  /** Node IDs affected by the current failures (array for safe Zustand equality). */
-  affectedNodes: string[];
+  /** Set of node IDs that are affected by the current failures. */
+  affectedNodes: Set<string>;
 
   /** Convergence steps produced by `runConvergence()`. Empty until called. */
   convergenceSteps: ConvergenceStep[];
@@ -109,7 +109,7 @@ const RESET: Pick<
   baseIR: null,
   failures: [],
   routingUpdate: null,
-  affectedNodes: [],
+  affectedNodes: new Set(),
   convergenceSteps: [],
   alternatePaths: [],
   isSimulating: false,
@@ -147,13 +147,13 @@ export const useWhatIfStore = create<WhatIfState>((set, get) => ({
   },
 
   clearFailures: () => {
-    set({ failures: [], routingUpdate: null, affectedNodes: [], convergenceSteps: [], alternatePaths: [] });
+    set({ failures: [], routingUpdate: null, affectedNodes: new Set(), convergenceSteps: [], alternatePaths: [] });
   },
 
   runSimulation: () => {
     const { failures, baseIR } = get();
     if (!baseIR || failures.length === 0) {
-      set({ routingUpdate: null, affectedNodes: [] });
+      set({ routingUpdate: null, affectedNodes: new Set() });
       return;
     }
 
@@ -164,7 +164,7 @@ export const useWhatIfStore = create<WhatIfState>((set, get) => ({
       engine.loadTopology(baseIR);
 
       const update = engine.simulateMultiFailure(failures);
-      const affectedNodes = update.affected_nodes;
+      const affectedNodes = new Set(update.affected_nodes);
 
       set({ routingUpdate: update, affectedNodes, isSimulating: false });
     } catch (err) {

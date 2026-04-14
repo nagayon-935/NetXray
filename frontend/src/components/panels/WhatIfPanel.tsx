@@ -258,7 +258,7 @@ export function WhatIfPanel() {
           <section>
             <h3 className="font-semibold text-slate-700 mb-1.5">Impact Summary</h3>
 
-            {affectedNodes.length === 0 ? (
+            {affectedNodes.size === 0 ? (
               <p className="text-emerald-600 bg-emerald-50 border border-emerald-200 rounded p-2">
                 No routing changes detected — topology is resilient to this failure.
               </p>
@@ -266,10 +266,10 @@ export function WhatIfPanel() {
               <>
                 <div className="bg-red-50 border border-red-200 rounded p-2 mb-2">
                   <p className="text-red-700 font-medium mb-1">
-                    {affectedNodes.length} node{affectedNodes.length !== 1 ? "s" : ""} affected
+                    {affectedNodes.size} node{affectedNodes.size !== 1 ? "s" : ""} affected
                   </p>
                   <div className="flex flex-wrap gap-1">
-                    {affectedNodes.map((id) => (
+                    {[...affectedNodes].map((id) => (
                       <span
                         key={id}
                         className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded font-mono text-[10px]"
@@ -286,9 +286,9 @@ export function WhatIfPanel() {
                       Routing Changes
                     </p>
                     <div className="space-y-0.5 max-h-48 overflow-y-auto">
-                      {changedPaths.map((c) => (
+                      {changedPaths.map((c, i) => (
                         <div
-                          key={`${c.nodeId}-${c.prefix}`}
+                          key={i}
                           className="flex items-center gap-1 bg-white border border-slate-100 rounded px-2 py-1 font-mono"
                         >
                           <span className="text-slate-500 text-[10px]">{c.nodeId}</span>
