@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from api.config import settings
-from api.routes import collect, topology, config, diagnosis, share, ws, telemetry, metrics, iac
+from api.routes import collect, topology, config, diagnosis, share, ws, telemetry, metrics, iac, link, lab, capture
 
 
 @asynccontextmanager
@@ -35,6 +35,9 @@ app.include_router(ws.router, prefix="/api")
 app.include_router(telemetry.router, prefix="/api")
 app.include_router(metrics.router)
 app.include_router(iac.router, prefix="/api")
+app.include_router(link.router, prefix="/api")
+app.include_router(lab.router, prefix="/api")
+app.include_router(capture.router, prefix="/api")
  # /metrics typically at root
 
 

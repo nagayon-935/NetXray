@@ -7,6 +7,7 @@ import {
   useNodesState,
   useEdgesState,
   type NodeMouseHandler,
+  type EdgeMouseHandler,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -34,6 +35,7 @@ import { ConvergencePanel } from "./panels/ConvergencePanel";
 import { TimelinePanel } from "./panels/TimelinePanel";
 import { ConfigGenPanel } from "./panels/ConfigGenPanel";
 import { DiagnosisPanel } from "./panels/DiagnosisPanel";
+import { LinkDetailPanel } from "./panels/LinkDetailPanel";
 
 const edgeTypes = {
   network: NetworkEdge,
@@ -45,6 +47,7 @@ export function TopologyCanvas() {
   const ir = useTopologyStore((s) => s.ir);
   const loadIR = useTopologyStore((s) => s.loadIR);
   const selectNode = useTopologyStore((s) => s.selectNode);
+  const selectLink = useTopologyStore((s) => s.selectLink);
   const activePanel = useTopologyStore((s) => s.activePanel);
   const heatmapEnabled = useLayerStore((s) => s.layers.heatmap);
   // Connect telemetry WebSocket only when an IR is loaded.
@@ -147,60 +150,130 @@ export function TopologyCanvas() {
     [viewResult.nodes, whatIfActive, failedNodeIds, whatIfAffected]
   );
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(styledNodes);
+  const [nodes, setNodes, onNodesChangeState] = useNodesState(styledNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(styledEdges);
   const { applyLayout } = useTopologyLayout();
   const layoutApplied = useRef(false);
+  const prevViewId = useRef(activeViewId);
+  const updateNodePositions = useTopologyStore((s) => s.updateNodePositions);
 
-  const onIRLoad = useCallback(() => {
-    layoutApplied.current = false;
-  }, []);
-  const { handleFile } = useIRLoad(onIRLoad);
+  const onNodesChange = onNodesChangeState;
+
+  const onNodeDragStop: NodeMouseHandler = useCallback(
+    (_event, _draggedNode) => {
+      const { nodePositions } = useTopologyStore.getState();
+      const nextPositions = { ...nodePositions };
+      
+      const getAbsPos = (nodeId: string): { x: number; y: number } => {
+        const n = nodes.find(curr => curr.id === nodeId);
+        if (!n) return { x: 0, y: 0 };
+        if (!n.parentId) return n.position;
+        const parentPos = getAbsPos(n.parentId);
+        return { x: parentPos.x + n.position.x, y: parentPos.y + n.position.y };
+      };
+
+      nodes.forEach(n => {
+        const abs = getAbsPos(n.id);
+        nextPositions[n.id] = {
+          x: abs.x,
+          y: abs.y,
+          width: n.measured?.width || (n.style?.width as number) || 180,
+          height: n.measured?.height || (n.style?.height as number) || 60
+        };
+      });
+      
+      useTopologyStore.setState({ nodePositions: nextPositions });
+    },
+    [nodes]
+  );
 
   // Sync nodes and edges into ReactFlow state when derived view or What-If changes
   useEffect(() => {
-    // If view pre-computes positions (needsLayout: false), just set them
-    if (!activeView.needsLayout) {
-      setNodes(styledNodes);
-      setEdges(styledEdges);
-      layoutApplied.current = true;
-      return;
+    const { nodePositions, updateNodePositions } = useTopologyStore.getState();
+
+    if (prevViewId.current !== activeViewId) {
+      prevViewId.current = activeViewId;
     }
 
-    // Otherwise (Physical view), apply ELK layout if needed
     if (styledNodes.length === 0) {
       setNodes([]);
       setEdges([]);
       return;
     }
 
-    // Re-layout if IR changed or node count changed or we specifically want a fresh layout
-    if (!layoutApplied.current || styledNodes.length !== nodes.length) {
+    if (!layoutApplied.current) {
       applyLayout(styledNodes, styledEdges, "spine-leaf").then(({ nodes: laid }) => {
         setNodes(laid);
         setEdges(styledEdges);
         layoutApplied.current = true;
+        updateNodePositions(laid);
       });
-    } else {
-      // Just update styles (What-If) without full relayout if node structure is same
-      setNodes((prev) =>
-        prev.map((n) => {
-          const styled = styledNodes.find((s) => s.id === n.id);
-          return styled ? { ...n, style: styled.style, data: styled.data } : n;
-        })
-      );
-      setEdges(styledEdges);
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [styledNodes, styledEdges, activeView.needsLayout]);
+
+    const mergedNodes = styledNodes.map((sn) => {
+      const stored = nodePositions[sn.id];
+      if (stored) {
+        return {
+          ...sn,
+          position: { x: stored.x, y: stored.y },
+          style: {
+            ...sn.style,
+            width: sn.type === "group" ? (stored.width ?? sn.style?.width) : sn.style?.width,
+            height: sn.type === "group" ? (stored.height ?? sn.style?.height) : sn.style?.height,
+          },
+        };
+      }
+      return sn;
+    });
+
+    const finalNodes = [...mergedNodes];
+    
+    finalNodes.forEach((n) => {
+      if (n.type === "group" && !nodePositions[n.id]) {
+        const children = finalNodes.filter((child) => child.parentId === n.id);
+        const childPos = children.map((c) => nodePositions[c.id]).filter(Boolean);
+        if (childPos.length > 0) {
+          const minX = Math.min(...childPos.map((p) => p!.x));
+          const minY = Math.min(...childPos.map((p) => p!.y));
+          const maxX = Math.max(...childPos.map((p) => p!.x + (p!.width || 180)));
+          const maxY = Math.max(...childPos.map((p) => p!.y + (p!.height || 60)));
+          const padding = 40;
+          n.position = { x: minX - padding, y: minY - padding };
+          n.style = { 
+            ...n.style, 
+            width: (maxX - minX) + padding * 2, 
+            height: (maxY - minY) + padding * 2 
+          };
+        }
+      }
+    });
+
+    finalNodes.forEach((n) => {
+      if (n.parentId) {
+        const parent = finalNodes.find((p) => p.id === n.parentId);
+        const stored = nodePositions[n.id];
+        if (parent && stored) {
+          n.position = {
+            x: stored.x - parent.position.x,
+            y: stored.y - parent.position.y,
+          };
+        }
+      }
+    });
+
+    setNodes(finalNodes);
+    setEdges(styledEdges);
+  }, [styledNodes, styledEdges, activeViewId]);
 
   const handleLayoutChange = useCallback(
     (preset: LayoutPreset) => {
       applyLayout(styledNodes, styledEdges, preset).then(({ nodes: laid }) => {
         setNodes(laid);
+        updateNodePositions(laid);
       });
     },
-    [styledNodes, styledEdges, applyLayout, setNodes]
+    [styledNodes, styledEdges, applyLayout, setNodes, updateNodePositions]
   );
 
   const handleLoadSample = useCallback(
@@ -219,9 +292,25 @@ export function TopologyCanvas() {
     [selectNode]
   );
 
+  const onEdgeClick: EdgeMouseHandler = useCallback(
+    (_event, edge) => {
+      if (edge.type === "network" || edge.type === "heatmap" || edge.type === "default") {
+        const linkId = edge.id.replace(/^(l\d+-)?phy-/, "");
+        selectLink(linkId);
+      }
+    },
+    [selectLink]
+  );
+
   const onPaneClick = useCallback(() => {
     selectNode(null);
-  }, [selectNode]);
+    selectLink(null);
+  }, [selectNode, selectLink]);
+
+  const onIRLoad = useCallback(() => {
+    layoutApplied.current = false;
+  }, []);
+  const { handleFile } = useIRLoad(onIRLoad);
 
   const onDrop = useCallback(
     async (e: React.DragEvent) => {
@@ -262,7 +351,9 @@ export function TopologyCanvas() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeClick={onNodeClick}
+            onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
+            onNodeDragStop={onNodeDragStop}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             fitView
@@ -288,6 +379,7 @@ export function TopologyCanvas() {
 
         {/* Side panels — only one shown at a time */}
         {activePanel === "detail" && <NodeDetailPanel />}
+        {activePanel === "link-detail" && <LinkDetailPanel />}
         {activePanel === "acl" && <AclTablePanel />}
         {activePanel === "packet" && <PacketSimPanel />}
         {activePanel === "snapshot" && <SnapshotPanel />}

@@ -70,6 +70,10 @@ class TelemetryManager:
         self._connections: dict[str, set[WebSocket]] = {}
         # topology_name → running mock-telemetry Task
         self._tasks: dict[str, asyncio.Task[None]] = {}
+        # run_id → set of WebSocket connections for lab log streaming
+        self._lab_connections: dict[str, set[WebSocket]] = {}
+        # topology_name → running docker-event-stream Task
+        self._event_tasks: dict[str, asyncio.Task[None]] = {}
 
     # ── WebSocket lifecycle ───────────────────────────────────────────────
 
@@ -180,6 +184,66 @@ class TelemetryManager:
             task.cancel()
             return True
         return False
+
+    # ── Lab log channels ─────────────────────────────────────────────────────
+
+    async def connect_lab_log(self, run_id: str, websocket: WebSocket) -> None:
+        await websocket.accept()
+        self._lab_connections.setdefault(run_id, set()).add(websocket)
+
+    def disconnect_lab_log(self, run_id: str, websocket: WebSocket) -> None:
+        bucket = self._lab_connections.get(run_id, set())
+        bucket.discard(websocket)
+        if not bucket:
+            self._lab_connections.pop(run_id, None)
+
+    async def broadcast_lab_log(self, run_id: str, payload: dict[str, Any]) -> None:
+        bucket = self._lab_connections.get(run_id)
+        if not bucket:
+            return
+        message = json.dumps(payload)
+        stale: set[WebSocket] = set()
+        for ws in list(bucket):
+            try:
+                await ws.send_text(message)
+            except Exception:
+                stale.add(ws)
+        for ws in stale:
+            self.disconnect_lab_log(run_id, ws)
+
+    # ── Docker event streaming ────────────────────────────────────────────────
+
+    async def start_event_stream(self, topology_name: str, lab_name: str) -> None:
+        """Subscribe to docker events for *lab_name*, broadcasting runtime_state patches."""
+        if topology_name in self._event_tasks and not self._event_tasks[topology_name].done():
+            return
+        task = asyncio.create_task(
+            self._event_loop(topology_name, lab_name),
+            name=f"events:{topology_name}",
+        )
+        self._event_tasks[topology_name] = task
+        logger.info("Event stream started: topology=%s lab=%s", topology_name, lab_name)
+
+    def stop_event_stream(self, topology_name: str) -> None:
+        task = self._event_tasks.pop(topology_name, None)
+        if task and not task.done():
+            task.cancel()
+            logger.info("Event stream stopped: topology=%s", topology_name)
+
+    async def _event_loop(self, topology_name: str, lab_name: str) -> None:
+        from collector.clab import stream_docker_events
+        try:
+            async for node_id, state in stream_docker_events(lab_name):
+                patch = [{
+                    "op": "replace",
+                    "path": f"/topology/nodes/~{node_id}/runtime_state",
+                    "value": state,
+                }]
+                await self.broadcast_patch(topology_name, patch)
+        except asyncio.CancelledError:
+            logger.info("Event loop cancelled: topology=%s", topology_name)
+        except Exception as exc:
+            logger.error("Event loop error topology=%s: %s", topology_name, exc)
 
     @property
     def status(self) -> dict[str, Any]:

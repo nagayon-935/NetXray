@@ -3,9 +3,12 @@ import {
   BaseEdge,
   EdgeLabelRenderer,
   getBezierPath,
+  useInternalNode,
   type EdgeProps,
 } from "@xyflow/react";
 import { COLORS } from "../../lib/colors";
+import { getEdgeParams } from "../../lib/floating-edges";
+import { useImpairmentStore } from "../../stores/impairment-store";
 
 interface NetworkEdgeData {
   state: "up" | "down";
@@ -16,6 +19,8 @@ interface NetworkEdgeData {
 
 function NetworkEdgeComponent({
   id,
+  source,
+  target,
   sourceX,
   sourceY,
   targetX,
@@ -25,23 +30,46 @@ function NetworkEdgeComponent({
   data,
   selected,
 }: EdgeProps) {
+  const sourceNode = useInternalNode(source);
+  const targetNode = useInternalNode(target);
+  const edgeParams = getEdgeParams(sourceNode, targetNode);
+
   const edgeData = data as unknown as NetworkEdgeData;
   const isDown = edgeData?.state === "down";
   const isOnPath = edgeData?.isOnPath ?? false;
 
-  const [edgePath, labelX, labelY] = getBezierPath({
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition,
-    targetPosition,
+  // Strip view-prefix (e.g. "l3-phy-") to get the raw link ID used as impairment key
+  const rawLinkId = id.replace(/^(l\d+-)?phy-/, "");
+  const impairment = useImpairmentStore((s) => s.impairments[rawLinkId]);
+
+  const result = getBezierPath({
+    sourceX: edgeParams?.sx ?? sourceX,
+    sourceY: edgeParams?.sy ?? sourceY,
+    targetX: edgeParams?.tx ?? targetX,
+    targetY: edgeParams?.ty ?? targetY,
+    sourcePosition: edgeParams?.sourcePos ?? sourcePosition,
+    targetPosition: edgeParams?.targetPos ?? targetPosition,
   });
+  const [edgePath] = result;
+  const labelX = result[1] as number;
+  const labelY = result[2] as number;
 
   let strokeColor: string = COLORS.NEUTRAL;
   if (isDown) strokeColor = COLORS.DOWN;
   else if (isOnPath) strokeColor = COLORS.PATH;
   if (selected) strokeColor = COLORS.SELECTED;
+
+  // Build impairment badge text: show only non-zero / non-null values
+  const impairmentParts: string[] = [];
+  if (impairment) {
+    if (impairment.delay_ms != null && impairment.delay_ms > 0)
+      impairmentParts.push(`${impairment.delay_ms}ms`);
+    if (impairment.loss_pct != null && impairment.loss_pct > 0)
+      impairmentParts.push(`${impairment.loss_pct}% loss`);
+    if (impairment.rate_kbit != null && impairment.rate_kbit > 0)
+      impairmentParts.push(`${impairment.rate_kbit}kbit`);
+  }
+  const impairmentLabel = impairmentParts.join(" / ");
 
   return (
     <>
@@ -49,7 +77,7 @@ function NetworkEdgeComponent({
         id={id}
         path={edgePath}
         style={{
-          stroke: strokeColor,
+          stroke: impairment ? COLORS.WARN : strokeColor,
           strokeWidth: isOnPath ? 3 : 2,
           strokeDasharray: isDown ? "6,4" : undefined,
         }}
@@ -65,6 +93,9 @@ function NetworkEdgeComponent({
             {edgeData?.sourceInterface} — {edgeData?.targetInterface}
           </span>
           {isDown && <span className="ml-1 text-red-500 font-bold">DOWN</span>}
+          {impairmentLabel && (
+            <span className="ml-1 text-amber-600 font-semibold">{impairmentLabel}</span>
+          )}
         </div>
       </EdgeLabelRenderer>
     </>

@@ -18,7 +18,6 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
   const ir = useTopologyStore((s) => s.ir);
   const setActivePanel = useTopologyStore((s) => s.setActivePanel);
   const activePanel = useTopologyStore((s) => s.activePanel);
-  const toggleLinkState = useTopologyStore((s) => s.toggleLinkState);
   const engineStatus = useTopologyStore((s) => s.engineStatus);
 
   const activeViewId = useViewStore((s) => s.activeView);
@@ -38,8 +37,6 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
   const { handleFile, handleApiLoad, fetchTopologyList } = useIRLoad();
   const [apiTopos, setApiTopos] = useState<{ name: string; node_count: number }[] | null>(null);
   const [showApiMenu, setShowApiMenu] = useState(false);
-
-  const linkList = ir?.topology.links ?? [];
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -324,6 +321,45 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
         </button>
       </div>
 
+      {/* Lab control */}
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => setActivePanel(activePanel === "lab" ? null : "lab")}
+          className={`px-2 py-1 border rounded transition-colors ${
+            activePanel === "lab"
+              ? "bg-emerald-50 border-emerald-400 text-emerald-700"
+              : "bg-white border-slate-200 hover:bg-slate-100"
+          }`}
+          title="Deploy / destroy containerlab topologies"
+        >
+          Lab
+        </button>
+        <button
+          onClick={() => setActivePanel(activePanel === "capture" ? null : "capture")}
+          disabled={!ir}
+          className={`px-2 py-1 border rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+            activePanel === "capture"
+              ? "bg-violet-50 border-violet-400 text-violet-700"
+              : "bg-white border-slate-200 hover:bg-slate-100"
+          }`}
+          title="Packet capture via tcpdump"
+        >
+          Capture
+        </button>
+        <button
+          onClick={() => setActivePanel(activePanel === "yaml-editor" ? null : "yaml-editor")}
+          disabled={!ir}
+          className={`px-2 py-1 border rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+            activePanel === "yaml-editor"
+              ? "bg-teal-50 border-teal-400 text-teal-700"
+              : "bg-white border-slate-200 hover:bg-slate-100"
+          }`}
+          title="View and deploy containerlab YAML"
+        >
+          YAML
+        </button>
+      </div>
+
       {/* Snapshot save shortcut */}
       <div className="flex items-center gap-1">
         <button
@@ -336,32 +372,6 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
         </button>
         <ShareButton />
       </div>
-
-      {/* Link toggles */}
-      {linkList.length > 0 && (
-        <>
-          <div className="w-px h-5 bg-slate-300" />
-          <div className="flex items-center gap-1">
-            <span className="text-slate-500 font-medium">Links:</span>
-            {linkList.map((link) => (
-              <button
-                key={link.id}
-                onClick={() => toggleLinkState(link.id)}
-                className={`px-2 py-1 border rounded font-mono ${
-                  link.state === "down"
-                    ? "bg-red-50 border-red-300 text-red-700 line-through"
-                    : "bg-white border-slate-200 hover:bg-slate-100"
-                }`}
-                title={`Toggle ${link.id} (currently ${link.state})`}
-              >
-                {link.source.node.replace("router", "R").replace("spine", "S").replace("leaf", "L")}
-                —
-                {link.target.node.replace("router", "R").replace("spine", "S").replace("leaf", "L")}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
     </div>
   );
 }

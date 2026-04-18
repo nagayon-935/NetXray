@@ -11,12 +11,14 @@ const HostIcon = (
   </svg>
 );
 
-function HostNodeComponent({ data, selected }: NodeProps) {
+function HostNodeComponent({ data, selected, sourcePosition, targetPosition }: NodeProps) {
   const node = data as unknown as IRNode;
   const firstIface = node.interfaces ? Object.values(node.interfaces)[0] : null;
   return (
     <NetworkNode
       selected={selected}
+      sourcePosition={sourcePosition}
+      targetPosition={targetPosition}
       borderCls="border-slate-200"
       selectedCls="border-purple-500 ring-2 ring-purple-200"
       handleCls="!bg-slate-300"
@@ -24,6 +26,7 @@ function HostNodeComponent({ data, selected }: NodeProps) {
       icon={HostIcon}
       label={node.hostname || node.id}
       subtitle={firstIface?.ip ?? "no IP"}
+      nodeId={node.id}
     />
   );
 }

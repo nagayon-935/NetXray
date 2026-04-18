@@ -34,7 +34,7 @@ const roleColors: Record<string, string> = {
 
 // ─── Tab type ────────────────────────────────────────────────────────────────
 
-type Tab = "general" | "bgp" | "srv6" | "evpn";
+type Tab = "general" | "bgp" | "ospf" | "srv6" | "evpn";
 
 // ─── Sub-panels ──────────────────────────────────────────────────────────────
 
@@ -56,21 +56,29 @@ function GeneralTab({ node }: { node: Node }) {
       {node.interfaces && (
         <div className="p-3 border-b border-slate-100">
           <div className="text-xs text-slate-500 uppercase tracking-wide mb-2">Interfaces</div>
-          <div className="space-y-1">
+          <div className="space-y-2">
             {Object.entries(node.interfaces).map(([name, iface]) => (
               <div
                 key={name}
-                className="flex items-center justify-between text-xs bg-slate-50 rounded px-2 py-1"
+                className="flex flex-col text-xs bg-slate-50 rounded px-2 py-1.5"
               >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      iface.state === "up" ? "bg-green-400" : "bg-red-400"
-                    }`}
-                  />
-                  <span className="font-mono text-slate-700">{name}</span>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        iface.state === "up" ? "bg-green-400" : "bg-red-400"
+                      }`}
+                    />
+                    <span className="font-mono text-slate-700 font-semibold">{name}</span>
+                  </div>
+                  <span className="text-slate-500 font-mono text-[10px]">{iface.ip ?? "—"}</span>
                 </div>
-                <span className="text-slate-500 font-mono text-[10px]">{iface.ip ?? "—"}</span>
+                {(iface.mac || iface.mtu) && (
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono mt-0.5 px-4 border-t border-slate-200 pt-1">
+                    <span>{iface.mac ? `MAC: ${iface.mac}` : ""}</span>
+                    <span>{iface.mtu ? `MTU: ${iface.mtu}` : ""}</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -258,6 +266,56 @@ function BgpTab({
   );
 }
 
+function OspfTab({ node }: { node: Node }) {
+  const ospf = node.ospf;
+  if (!ospf) return null;
+
+  return (
+    <div className="p-3">
+      <div className="mb-3">
+        <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">OSPF Config</div>
+        <div className="grid grid-cols-2 gap-1 text-xs bg-slate-50 rounded px-2 py-1.5">
+          <span className="text-slate-500">Process ID</span>
+          <span className="font-mono text-slate-800">{ospf.process_id ?? "—"}</span>
+          <span className="text-slate-500">Router-ID</span>
+          <span className="font-mono text-slate-800">{ospf.router_id}</span>
+        </div>
+      </div>
+
+      {ospf.interfaces && ospf.interfaces.length > 0 ? (
+        <div>
+          <div className="text-xs text-slate-500 uppercase tracking-wide mb-2">
+            Interfaces ({ospf.interfaces.length})
+          </div>
+          <div className="space-y-1.5">
+            {ospf.interfaces.map((iface) => (
+              <div
+                key={iface.name}
+                className="rounded border border-slate-100 bg-slate-50 text-xs px-2 py-1.5"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-mono font-semibold text-slate-700">{iface.name}</span>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-100 text-emerald-700">
+                    Area {iface.area}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-500 mt-1">
+                  <div>Type: <span className="font-mono">{iface.network_type ?? "—"}</span></div>
+                  <div>Cost: <span className="font-mono">{iface.cost ?? "—"}</span></div>
+                  <div>Hello/Dead: <span className="font-mono">{iface.hello_interval ?? "?"}/{iface.dead_interval ?? "?"}s</span></div>
+                  <div>Passive: <span className="font-mono">{iface.passive ? "Yes" : "No"}</span></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="text-xs text-slate-400">No OSPF interfaces configured</div>
+      )}
+    </div>
+  );
+}
+
 function Srv6Tab({ node }: { node: Node }) {
   const srv6 = node.srv6;
   if (!srv6) return null;
@@ -395,6 +453,7 @@ export function NodeDetailPanel() {
   );
 
   const hasBgp = !!node.bgp;
+  const hasOspf = !!node.ospf;
   const hasSrv6 = !!node.srv6;
   const hasEvpn = !!node.evpn;
 
@@ -403,6 +462,7 @@ export function NodeDetailPanel() {
     ...(hasBgp
       ? [{ id: "bgp" as Tab, label: "BGP", badge: nodeMismatches.length || undefined }]
       : []),
+    ...(hasOspf ? [{ id: "ospf" as Tab, label: "OSPF" }] : []),
     ...(hasSrv6 ? [{ id: "srv6" as Tab, label: "SRv6" }] : []),
     ...(hasEvpn ? [{ id: "evpn" as Tab, label: "EVPN" }] : []),
   ];
@@ -438,6 +498,7 @@ export function NodeDetailPanel() {
       <div>
         {currentTab === "general" && <GeneralTab node={node} />}
         {currentTab === "bgp" && <BgpTab node={node} mismatches={nodeMismatches} />}
+        {currentTab === "ospf" && <OspfTab node={node} />}
         {currentTab === "srv6" && <Srv6Tab node={node} />}
         {currentTab === "evpn" && <EvpnTab node={node} />}
       </div>

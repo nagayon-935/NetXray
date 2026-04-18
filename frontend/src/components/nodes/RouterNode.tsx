@@ -13,18 +13,21 @@ const RouterIcon = (
   </svg>
 );
 
-function RouterNodeComponent({ data, selected }: NodeProps) {
+function RouterNodeComponent({ data, selected, sourcePosition, targetPosition }: NodeProps) {
   const node = data as unknown as IRNode;
   const ifaceCount = node.interfaces ? Object.keys(node.interfaces).length : 0;
   return (
     <NetworkNode
       selected={selected}
+      sourcePosition={sourcePosition}
+      targetPosition={targetPosition}
       borderCls="border-slate-300"
       selectedCls="border-blue-500 ring-2 ring-blue-200"
       handleCls="!bg-slate-400"
       icon={RouterIcon}
       label={node.hostname || node.id}
       subtitle={`${node.vendor ?? "generic"} | ${ifaceCount} IFs`}
+      nodeId={node.id}
     />
   );
 }

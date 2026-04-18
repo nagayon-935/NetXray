@@ -13,23 +13,27 @@ export interface TopologyState {
   ir: NetXrayIR | null;
   flowNodes: FlowNode[];
   flowEdges: FlowEdge[];
+  nodePositions: Record<string, { x: number; y: number; width?: number; height?: number }>;
   selectedNodeId: string | null;
+  selectedLinkId: string | null;
   selectedAclName: string | null;
   packetPath: PacketPath | null;
   shadowedRules: Record<string, ShadowedRule[]>;
-  activePanel: "detail" | "acl" | "packet" | "snapshot" | "whatif" | "convergence" | "timeline" | "config" | "diagnosis" | null;
+  activePanel: "detail" | "link-detail" | "acl" | "packet" | "snapshot" | "whatif" | "convergence" | "timeline" | "config" | "diagnosis" | null;
   engineStatus: EngineStatus;
 
   loadIR: (ir: NetXrayIR) => void;
   selectNode: (nodeId: string | null) => void;
+  selectLink: (linkId: string | null) => void;
   selectAcl: (aclName: string | null) => void;
   setPacketPath: (path: PacketPath | null) => void;
   setShadowedRules: (aclName: string, rules: ShadowedRule[]) => void;
-  setActivePanel: (panel: "detail" | "acl" | "packet" | "snapshot" | "whatif" | "convergence" | "timeline" | "config" | "diagnosis" | null) => void;
+  setActivePanel: (panel: "detail" | "link-detail" | "acl" | "packet" | "snapshot" | "whatif" | "convergence" | "timeline" | "config" | "diagnosis" | null) => void;
   toggleLinkState: (linkId: string) => void;
   updateFlowElements: () => void;
   setEngineStatus: (status: "wasm" | "mock") => void;
   applyPatches: (patches: any[]) => void;
+  updateNodePositions: (nodes: FlowNode[]) => void;
 }
 
 function irNodeToFlowNode(node: Node): FlowNode {
@@ -56,14 +60,12 @@ function irLinkToFlowEdge(link: Link, packetPath: PacketPath | null): FlowEdge {
     source: link.source.node,
     target: link.target.node,
     type: "network",
-    animated: isOnPath ?? false,
+    animated: false,
     data: {
       state: link.state,
-      sourceNode: link.source.node,
       sourceInterface: link.source.interface,
-      targetNode: link.target.node,
       targetInterface: link.target.interface,
-      isOnPath: isOnPath ?? false,
+      isOnPath,
     },
     style: link.state === "down" ? { stroke: COLORS.DOWN, strokeDasharray: "5,5" } : undefined,
   };
@@ -73,7 +75,9 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
   ir: null,
   flowNodes: [],
   flowEdges: [],
+  nodePositions: {},
   selectedNodeId: null,
+  selectedLinkId: null,
   selectedAclName: null,
   packetPath: null,
   shadowedRules: {},
@@ -84,11 +88,15 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
     getEngine().loadTopology(ir);
     const flowNodes = ir.topology.nodes.map(irNodeToFlowNode);
     const flowEdges = ir.topology.links.map((l) => irLinkToFlowEdge(l, null));
-    set({ ir, flowNodes, flowEdges, packetPath: null, shadowedRules: {} });
+    set({ ir, flowNodes, flowEdges, nodePositions: {}, packetPath: null, shadowedRules: {} });
   },
 
   selectNode: (nodeId) => {
-    set({ selectedNodeId: nodeId, activePanel: nodeId ? "detail" : null });
+    set({ selectedNodeId: nodeId, selectedLinkId: null, activePanel: nodeId ? "detail" : null });
+  },
+
+  selectLink: (linkId) => {
+    set({ selectedLinkId: linkId, selectedNodeId: null, activePanel: linkId ? "link-detail" : null });
   },
 
   selectAcl: (aclName) => {
@@ -129,8 +137,9 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
   updateFlowElements: () => {
     const { ir, packetPath } = get();
     if (!ir) return;
-    const flowEdges = ir.topology.links.map((l) => irLinkToFlowEdge(l, packetPath));
-    set({ flowEdges });
+    set({
+      flowEdges: ir.topology.links.map((l) => irLinkToFlowEdge(l, packetPath)),
+    });
   },
 
   setEngineStatus: (status) => set({ engineStatus: status }),
@@ -138,10 +147,27 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
   applyPatches: (patches) => {
     const { ir } = get();
     if (!ir) return;
-    const updatedIR = applyPatch(ir, patches);
-    set({ ir: updatedIR });
-    // Telemetry patches only update traffic counters — HeatmapEdge reads
-    // directly from the IR store so no flowEdge rebuild is needed.
-    // (updateFlowElements omitted here to avoid unnecessary re-renders.)
+
+    let nextIR = { ...ir };
+    for (const p of patches) {
+      nextIR = applyPatch(nextIR, p);
+    }
+    getEngine().loadTopology(nextIR);
+    set({ ir: nextIR });
+    get().updateFlowElements();
+  },
+
+  updateNodePositions: (nodes) => {
+    const { nodePositions } = get();
+    const next = { ...nodePositions };
+    nodes.forEach((n) => {
+      next[n.id] = { 
+        x: n.position.x, 
+        y: n.position.y,
+        width: n.measured?.width || (n.style?.width as number) || 180,
+        height: n.measured?.height || (n.style?.height as number) || 60
+      };
+    });
+    set({ nodePositions: next });
   },
 }));

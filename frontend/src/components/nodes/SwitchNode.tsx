@@ -13,18 +13,21 @@ const SwitchIcon = (
   </svg>
 );
 
-function SwitchNodeComponent({ data, selected }: NodeProps) {
+function SwitchNodeComponent({ data, selected, sourcePosition, targetPosition }: NodeProps) {
   const node = data as unknown as IRNode;
   const ifaceCount = node.interfaces ? Object.keys(node.interfaces).length : 0;
   return (
     <NetworkNode
       selected={selected}
-      borderCls="border-emerald-300"
-      selectedCls="border-green-500 ring-2 ring-green-200"
+      sourcePosition={sourcePosition}
+      targetPosition={targetPosition}
+      borderCls="border-slate-300"
+      selectedCls="border-emerald-500 ring-2 ring-emerald-200"
       handleCls="!bg-emerald-400"
       icon={SwitchIcon}
       label={node.hostname || node.id}
       subtitle={`${node.vendor ?? "generic"} | ${ifaceCount} IFs`}
+      nodeId={node.id}
     />
   );
 }

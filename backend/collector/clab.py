@@ -1,9 +1,11 @@
-"""containerlab inspect integration."""
+"""containerlab inspect integration and docker event streaming."""
 
+import asyncio
 import json
 import logging
 import subprocess
 from dataclasses import dataclass
+from typing import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +99,49 @@ def inspect_lab(topology_file: str | None = None) -> list[ClabNode]:
         nodes.append(ClabNode(name=name, mgmt_ip=mgmt_ip, vendor=vendor, state=state))
 
     return nodes
+
+
+async def stream_docker_events(lab_name: str) -> AsyncGenerator[tuple[str, str], None]:
+    """
+    Async generator yielding (node_id, state) from docker container events.
+    Filtered by the clab-topo label so only containers for *lab_name* are watched.
+    Yields states: "running" | "stopped".
+    """
+    cmd = [
+        "docker", "events",
+        "--filter", f"label=clab-topo={lab_name}",
+        "--filter", "type=container",
+        "--format", "{{json .}}",
+    ]
+    proc: asyncio.subprocess.Process | None = None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        assert proc.stdout is not None
+        async for raw in proc.stdout:
+            try:
+                event = json.loads(raw.decode())
+                action = event.get("Action", "")
+                attrs = (event.get("Actor") or {}).get("Attributes") or {}
+                node_id = attrs.get("clab-node-name", "")
+                if not node_id:
+                    continue
+                if action == "start":
+                    yield node_id, "running"
+                elif action in ("stop", "die", "kill"):
+                    yield node_id, "stopped"
+            except (json.JSONDecodeError, KeyError):
+                continue
+    except FileNotFoundError:
+        logger.warning("docker binary not found — event streaming disabled")
+    except asyncio.CancelledError:
+        if proc and proc.returncode is None:
+            proc.terminate()
+            await proc.wait()
+        raise
 
 
 def exec_node(node_name: str, commands: list[str]) -> dict[str, str]:

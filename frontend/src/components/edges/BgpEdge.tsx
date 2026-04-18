@@ -1,6 +1,7 @@
 import { memo } from "react";
-import { EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react";
+import { getBezierPath, useInternalNode, type EdgeProps } from "@xyflow/react";
 import { COLORS } from "../../lib/colors";
+import { getEdgeParams } from "../../lib/floating-edges";
 
 interface BgpEdgeData {
   sourceAs: number;
@@ -11,6 +12,8 @@ interface BgpEdgeData {
 
 function BgpEdgeComponent({
   id,
+  source,
+  target,
   sourceX,
   sourceY,
   targetX,
@@ -20,19 +23,23 @@ function BgpEdgeComponent({
   data,
   style,
 }: EdgeProps) {
+  const sourceNode = useInternalNode(source);
+  const targetNode = useInternalNode(target);
+  const edgeParams = getEdgeParams(sourceNode, targetNode);
+
   const d = data as unknown as BgpEdgeData;
   const state = d?.state ?? "unknown";
   const isEstablished = state === "established";
 
   // Use higher curvature than NetworkEdge (default 0.25) to visually separate
   // BGP overlay edges from coincident physical links.
-  const [edgePath, labelX, labelY] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
+  const [edgePath] = getBezierPath({
+    sourceX: edgeParams?.sx ?? sourceX,
+    sourceY: edgeParams?.sy ?? sourceY,
+    targetX: edgeParams?.tx ?? targetX,
+    targetY: edgeParams?.ty ?? targetY,
+    sourcePosition: edgeParams?.sourcePos ?? sourcePosition,
+    targetPosition: edgeParams?.targetPos ?? targetPosition,
     curvature: 0.55,
   });
 
@@ -52,26 +59,6 @@ function BgpEdgeComponent({
           ...style,
         }}
       />
-      <EdgeLabelRenderer>
-        <div
-          className="nodrag nopan absolute pointer-events-none"
-          style={{
-            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-          }}
-        >
-          <span
-            className={`text-[9px] px-1 py-0.5 rounded-sm font-mono border ${
-              isEstablished
-                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                : "bg-amber-50 text-amber-700 border-amber-200"
-            }`}
-          >
-            {d?.sourceAs !== undefined ? `AS${d.sourceAs}` : "BGP"}
-            {" ↔ "}
-            {d?.targetAs !== undefined ? `AS${d.targetAs}` : "?"}
-          </span>
-        </div>
-      </EdgeLabelRenderer>
     </>
   );
 }

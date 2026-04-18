@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import ELK from "elkjs/lib/elk.bundled.js";
-import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
+import { Position, type Node as FlowNode, type Edge as FlowEdge } from "@xyflow/react";
 
 const elk = new ELK();
 
@@ -39,14 +39,36 @@ export function useTopologyLayout() {
     ): Promise<{ nodes: FlowNode[]; edges: FlowEdge[] }> => {
       if (nodes.length === 0) return { nodes, edges };
 
+      const elkNodeMap = new Map<string, any>();
+      const rootChildren: any[] = [];
+
+      nodes.forEach((node) => {
+        const isGroup = node.type === "group";
+        const elkNode = {
+          id: node.id,
+          width: isGroup ? undefined : NODE_WIDTH,
+          height: isGroup ? undefined : NODE_HEIGHT,
+          layoutOptions: isGroup
+            ? { "elk.padding": "[top=40,left=20,bottom=20,right=20]" }
+            : undefined,
+          children: [] as any[],
+        };
+        elkNodeMap.set(node.id, elkNode);
+      });
+
+      nodes.forEach((node) => {
+        const elkNode = elkNodeMap.get(node.id)!;
+        if (node.parentId && elkNodeMap.has(node.parentId)) {
+          elkNodeMap.get(node.parentId)!.children.push(elkNode);
+        } else {
+          rootChildren.push(elkNode);
+        }
+      });
+
       const elkGraph = {
         id: "root",
         layoutOptions: presetOptions[preset],
-        children: nodes.map((node) => ({
-          id: node.id,
-          width: NODE_WIDTH,
-          height: NODE_HEIGHT,
-        })),
+        children: rootChildren,
         edges: edges.map((edge) => ({
           id: edge.id,
           sources: [edge.source],
@@ -56,15 +78,49 @@ export function useTopologyLayout() {
 
       const layouted = await elk.layout(elkGraph);
 
+      let targetPosition = Position.Top;
+      let sourcePosition = Position.Bottom;
+      if (preset === "layered") {
+        targetPosition = Position.Left;
+        sourcePosition = Position.Right;
+      } else if (preset === "force") {
+        targetPosition = Position.Top;
+        sourcePosition = Position.Bottom;
+      }
+
+      // Helper to find node positions recursively from layouted graph
+      const positionMap = new Map<string, { x: number; y: number; width?: number; height?: number }>();
+      const extractPositions = (elkNodes: any[]) => {
+        for (const n of elkNodes) {
+          positionMap.set(n.id, { x: n.x ?? 0, y: n.y ?? 0, width: n.width, height: n.height });
+          if (n.children && n.children.length > 0) {
+            extractPositions(n.children);
+          }
+        }
+      };
+      extractPositions(layouted.children || []);
+
       const layoutedNodes = nodes.map((node) => {
-        const elkNode = layouted.children?.find((n) => n.id === node.id);
-        return {
+        const pos = positionMap.get(node.id);
+        const baseNode = {
           ...node,
+          targetPosition,
+          sourcePosition,
           position: {
-            x: elkNode?.x ?? 0,
-            y: elkNode?.y ?? 0,
+            x: pos?.x ?? 0,
+            y: pos?.y ?? 0,
           },
         };
+        
+        if (node.type === "group" && pos?.width && pos?.height) {
+          baseNode.style = {
+            ...node.style,
+            width: pos.width,
+            height: pos.height,
+          };
+        }
+        
+        return baseNode;
       });
 
       return { nodes: layoutedNodes, edges };

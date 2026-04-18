@@ -59,6 +59,7 @@
           "additionalProperties": { "$ref": "#/$defs/Vrf" }
         },
         "bgp": { "$ref": "#/$defs/BgpConfig" },
+        "ospf": { "$ref": "#/$defs/OspfConfig" },
         "srv6": { "$ref": "#/$defs/Srv6Config" },
         "evpn": { "$ref": "#/$defs/EvpnConfig" }
       }
@@ -158,6 +159,32 @@
         "dst": { "type": "string" },
         "src_port": { "type": ["integer", "null"], "default": null },
         "dst_port": { "type": ["integer", "null"], "default": null }
+      }
+    },
+    "OspfConfig": {
+      "type": "object",
+      "description": "OSPF configuration and state for a node",
+      "required": ["router_id"],
+      "properties": {
+        "router_id": { "type": "string", "description": "IPv4 router-ID" },
+        "process_id": { "type": ["integer", "null"], "description": "OSPF process ID" },
+        "interfaces": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/OspfInterface" }
+        }
+      }
+    },
+    "OspfInterface": {
+      "type": "object",
+      "required": ["name", "area"],
+      "properties": {
+        "name": { "type": "string", "description": "Interface name" },
+        "area": { "type": "string", "description": "OSPF Area (e.g. '0.0.0.0' or '0')" },
+        "cost": { "type": ["integer", "null"], "description": "OSPF interface cost" },
+        "network_type": { "type": ["string", "null"], "description": "e.g. 'point-to-point', 'broadcast'" },
+        "passive": { "type": ["boolean", "null"], "default": false },
+        "hello_interval": { "type": ["integer", "null"], "description": "Hello interval in seconds" },
+        "dead_interval": { "type": ["integer", "null"], "description": "Dead interval in seconds" }
       }
     },
     "BgpConfig": {

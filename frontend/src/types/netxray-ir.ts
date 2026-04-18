@@ -19,8 +19,11 @@ export interface Node {
   hostname?: string;
   interfaces?: Record<string, Interface>;
   vrfs?: Record<string, Vrf>;
+  // Runtime state — populated by docker event streaming, not stored in IR files
+  runtime_state?: "running" | "stopped" | "starting" | "unknown";
   // v0.2+ optional extension blocks
   bgp?: BgpConfig;
+  ospf?: OspfConfig;
   srv6?: Srv6Config;
   evpn?: EvpnConfig;
   [key: string]: unknown; // forward-compatible unknown fields
@@ -28,6 +31,8 @@ export interface Node {
 
 export interface Interface {
   ip?: string;
+  mac?: string;
+  mtu?: number;
   state: "up" | "down";
   cost?: number;
   acl_in?: string | null;
@@ -87,6 +92,22 @@ export interface BgpConfig {
   local_as: number;
   router_id: string;
   sessions?: BgpSession[];
+}
+
+export interface OspfConfig {
+  router_id: string;
+  process_id?: number | null;
+  interfaces?: OspfInterface[];
+}
+
+export interface OspfInterface {
+  name: string;
+  area: string;
+  cost?: number | null;
+  network_type?: string | null;
+  passive?: boolean | null;
+  hello_interval?: number | null;
+  dead_interval?: number | null;
 }
 
 export type BgpSessionState =
