@@ -19,7 +19,7 @@ export interface TopologyState {
   selectedAclName: string | null;
   packetPath: PacketPath | null;
   shadowedRules: Record<string, ShadowedRule[]>;
-  activePanel: "detail" | "link-detail" | "acl" | "packet" | "snapshot" | "whatif" | "convergence" | "timeline" | "config" | "diagnosis" | null;
+  activePanel: "detail" | "link-detail" | "acl" | "packet" | "snapshot" | "whatif" | "convergence" | "timeline" | "config" | "diagnosis" | "lab" | "capture" | "yaml-editor" | null;
   engineStatus: EngineStatus;
 
   loadIR: (ir: NetXrayIR) => void;
@@ -28,7 +28,7 @@ export interface TopologyState {
   selectAcl: (aclName: string | null) => void;
   setPacketPath: (path: PacketPath | null) => void;
   setShadowedRules: (aclName: string, rules: ShadowedRule[]) => void;
-  setActivePanel: (panel: "detail" | "link-detail" | "acl" | "packet" | "snapshot" | "whatif" | "convergence" | "timeline" | "config" | "diagnosis" | null) => void;
+  setActivePanel: (panel: "detail" | "link-detail" | "acl" | "packet" | "snapshot" | "whatif" | "convergence" | "timeline" | "config" | "diagnosis" | "lab" | "capture" | "yaml-editor" | null) => void;
   toggleLinkState: (linkId: string) => void;
   updateFlowElements: () => void;
   setEngineStatus: (status: "wasm" | "mock") => void;
