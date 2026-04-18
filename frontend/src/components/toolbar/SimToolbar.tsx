@@ -16,6 +16,7 @@ interface SimToolbarProps {
 
 export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
   const ir = useTopologyStore((s) => s.ir);
+  const loadIR = useTopologyStore((s) => s.loadIR);
   const setActivePanel = useTopologyStore((s) => s.setActivePanel);
   const activePanel = useTopologyStore((s) => s.activePanel);
   const engineStatus = useTopologyStore((s) => s.engineStatus);
