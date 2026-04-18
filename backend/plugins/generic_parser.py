@@ -1,10 +1,12 @@
 import json
 import logging
-from translator.parser_base import ParserBase, InterfaceData
+from translator.parser_base import InterfaceData
 
 logger = logging.getLogger(__name__)
 
-class GenericParser(ParserBase):
+class GenericParser:
+    vendor_name = "generic"
+
     def parse_interfaces(self, outputs: dict[str, str]) -> list[InterfaceData]:
         raw = outputs.get("ip -j addr", "[]")
         try:
