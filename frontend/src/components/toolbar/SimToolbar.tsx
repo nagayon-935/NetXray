@@ -131,23 +131,69 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
             API...
           </button>
           {showApiMenu && (
-            <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-slate-200 rounded shadow-lg min-w-[160px]">
-              {apiTopos && apiTopos.length === 0 && (
-                <div className="px-3 py-2 text-slate-400 text-xs">No topologies saved</div>
-              )}
-              {apiTopos?.map((t) => (
+            <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-slate-200 rounded shadow-lg min-w-[240px] p-1">
+              <div className="px-3 py-2 text-[10px] text-slate-400 uppercase font-bold border-b border-slate-100 mb-1">
+                Saved Topologies
+              </div>
+              <div className="max-h-48 overflow-y-auto">
+                {apiTopos && apiTopos.length === 0 && (
+                  <div className="px-3 py-2 text-slate-400 text-xs italic">No saved topologies</div>
+                )}
+                {apiTopos?.map((t) => (
+                  <button
+                    key={t.name}
+                    onClick={() => {
+                      handleApiLoad(t.name);
+                      setShowApiMenu(false);
+                    }}
+                    className="w-full text-left px-3 py-1.5 hover:bg-slate-50 text-xs rounded"
+                  >
+                    <span className="font-medium text-slate-700">{t.name}</span>
+                    <span className="text-slate-400 ml-1">({t.node_count} nodes)</span>
+                  </button>
+                ))}
+              </div>
+              
+              <div className="border-t border-slate-100 mt-1 pt-1 p-2 space-y-2">
+                <div className="text-[10px] text-slate-400 uppercase font-bold mb-1">
+                  Scan Running Lab
+                </div>
+                <input 
+                  type="text"
+                  placeholder="/labs/your-lab.clab.yml"
+                  className="w-full text-[10px] font-mono px-2 py-1 border rounded"
+                  id="clab-path-input"
+                  onClick={(e) => e.stopPropagation()}
+                  defaultValue="/labs/frr.clab.yml"
+                />
                 <button
-                  key={t.name}
-                  onClick={() => {
-                    handleApiLoad(t.name);
-                    setShowApiMenu(false);
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const input = document.getElementById('clab-path-input') as HTMLInputElement;
+                    const path = input.value;
+                    if (!path) return;
+                    try {
+                      const res = await fetch("http://localhost:8000/api/collect", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          topology_name: "collected-lab",
+                          clab_topology: path
+                        })
+                      });
+                      if (!res.ok) throw new Error("Failed");
+                      const ir = await res.json();
+                      loadIR(ir);
+                      setShowApiMenu(false);
+                    } catch (err) {
+                      alert("Scan failed. Check if path is correct and lab is running.");
+                    }
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-slate-50 text-xs"
+                  className="w-full bg-blue-500 text-white text-[10px] font-bold py-1 rounded hover:bg-blue-600"
                 >
-                  <span className="font-medium">{t.name}</span>
-                  <span className="text-slate-400 ml-1">({t.node_count} nodes)</span>
+                  SCAN &amp; LOAD
                 </button>
-              ))}
+              </div>
             </div>
           )}
         </div>

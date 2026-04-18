@@ -16,6 +16,7 @@ class ClabNode:
     mgmt_ip: str
     vendor: str    # "frr" | "arista" | "generic"
     state: str     # "running" | "stopped" | ...
+    short_name: str | None = None
 
 
 def _detect_vendor(image: str, kind: str) -> str:
@@ -95,8 +96,12 @@ def inspect_lab(topology_file: str | None = None) -> list[ClabNode]:
             logger.warning("No management IP for node '%s', skipping", name)
             continue
 
+        # Try to get the short name from labels
+        labels = container.get("labels", {})
+        short_name = labels.get("clab-node-name")
+
         vendor = _detect_vendor(image, kind)
-        nodes.append(ClabNode(name=name, mgmt_ip=mgmt_ip, vendor=vendor, state=state))
+        nodes.append(ClabNode(name=name, mgmt_ip=mgmt_ip, vendor=vendor, state=state, short_name=short_name))
 
     return nodes
 
