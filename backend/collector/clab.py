@@ -53,11 +53,16 @@ def _detect_vendor(image: str, kind: str) -> str:
 def inspect_lab(topology_file: str | None = None) -> list[ClabNode]:
     """
     Run `containerlab inspect --format json` and return node list.
-    topology_file: optional path to .clab.yml file
+    topology_file: optional path to .clab.yml file OR a lab name.
     """
+    import os
     cmd = ["containerlab", "inspect", "--format", "json"]
     if topology_file:
-        cmd += ["--topo", topology_file]
+        if os.path.isfile(topology_file):
+            cmd += ["--topo", topology_file]
+        else:
+            # Assume it's a lab name if not a file
+            cmd += ["--name", topology_file]
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=True)
