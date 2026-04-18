@@ -32,11 +32,20 @@ class FrrDriver:
     def collect(
         self, host: str, credentials: dict[str, str], node_name: str | None = None
     ) -> dict[str, str]:
-        # If node_name is present, prefer clab exec over SSH (common for clab FRR).
+        # If node_name is present, use docker exec directly.
+        # This is more reliable than containerlab exec in various environments.
         if node_name:
-            from collector.clab import exec_node
-
-            raw = exec_node(node_name, _COMMANDS)
+            import subprocess
+            results = {}
+            for cmd in _COMMANDS:
+                try:
+                    # Run via docker exec on the host (NetXray container has docker CLI + socket)
+                    full_cmd = ["docker", "exec", node_name, "sh", "-c", cmd]
+                    res = subprocess.run(full_cmd, capture_output=True, text=True, timeout=10, check=True)
+                    results[cmd] = res.stdout
+                except Exception as e:
+                    results[cmd] = f"ERROR: {str(e)}"
+            raw = results
         else:
             username = credentials.get("username", "admin")
             password = credentials.get("password", "admin")
