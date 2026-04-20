@@ -143,7 +143,7 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
                     const path = input.value;
                     if (!path) return;
                     try {
-                      const res = await fetch("http://localhost:8000/api/collect", {
+                      const res = await fetch("/api/collect", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
