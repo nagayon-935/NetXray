@@ -136,12 +136,12 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
                 </div>
                 <input
                   type="text"
-                  placeholder="/labs/your-lab.clab.yml"
+                  placeholder="e.g. frr.clab.yml or frr"
                   className="w-full text-[10px] font-mono px-2 py-1 border rounded"
                   id="clab-path-input"
                   onClick={(e) => e.stopPropagation()}
-                  defaultValue="/labs/frr.clab.yml"
                 />
+
                 <button
                   onClick={async (e) => {
                     e.stopPropagation();

@@ -16,8 +16,8 @@ from collector.telemetry_manager import telemetry_manager
 
 router = APIRouter(prefix="/lab", tags=["lab"])
 
-# Topology names use only word chars, dots, slashes, hyphens, spaces
-_SAFE_PATH = re.compile(r'^[\w./ _\-]+\.ya?ml$')
+# Topology names use only word chars, dots, slashes, hyphens, spaces. Extension is optional.
+_SAFE_PATH = re.compile(r'^[\w./ _\-]+(?:\.ya?ml)?$')
 
 
 class LifecycleRequest(BaseModel):
@@ -43,10 +43,31 @@ def _busy_check() -> None:
 
 
 def _resolve_topo(path: str) -> str:
-    if path and not path.startswith("/") and not path.startswith("."):
-        potential = settings.clab_labs_dir / path
+    if not path:
+        return path
+        
+    # If absolute or relative to current dir, try it first
+    if path.startswith("/") or path.startswith("."):
+        if os.path.exists(path):
+            return path
+        for ext in [".clab.yml", ".clab.yaml"]:
+            if os.path.exists(path + ext):
+                return path + ext
+        return path
+
+    # Try resolving against labs directory
+    base = settings.clab_labs_dir
+    # 1. Try original path
+    potential = base / path
+    if potential.exists():
+        return str(potential)
+    
+    # 2. Try with extensions
+    for ext in [".clab.yml", ".clab.yaml"]:
+        potential = base / (path + ext)
         if potential.exists():
             return str(potential)
+            
     return path
 
 

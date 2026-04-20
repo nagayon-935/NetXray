@@ -18,21 +18,22 @@ def collect_topology(req: CollectRequest) -> dict:
     Falls back to mock IR if containerlab / SSH is unavailable.
     """
     try:
-        from collector.clab import inspect_lab
+        from collector.clab import inspect_lab, get_links_from_topo
         from collector.drivers import DRIVER_REGISTRY
         from translator.ir_builder import build_ir
         from translator.parsers import PARSER_REGISTRY
 
         topo_path = req.clab_topology
-        if topo_path and not topo_path.startswith("/") and not topo_path.startswith("."):
-            # Resolve relative path against labs directory
-            potential_path = settings.clab_labs_dir / topo_path
-            if potential_path.exists():
-                topo_path = str(potential_path)
+        if topo_path:
+            from api.routes.lab import _resolve_topo
+            topo_path = _resolve_topo(topo_path)
 
         nodes = inspect_lab(topo_path)
         if not nodes:
             raise HTTPException(status_code=500, detail="No nodes found in containerlab topology")
+
+        # Extract explicit links from .clab.yml if available
+        clab_links = get_links_from_topo(topo_path)
 
         driver_outputs: dict[str, dict[str, str]] = {}
         errors: list[str] = []
@@ -66,7 +67,7 @@ def collect_topology(req: CollectRequest) -> dict:
                 logger.warning("Failed to collect from %s: %s", node.name, exc)
                 errors.append(f"{node.name}: {exc}")
 
-        ir = build_ir(nodes, driver_outputs, PARSER_REGISTRY)
+        ir = build_ir(nodes, driver_outputs, PARSER_REGISTRY, clab_links=clab_links)
         _validate_ir(ir)
 
         path = _topo_path(req.topology_name)
