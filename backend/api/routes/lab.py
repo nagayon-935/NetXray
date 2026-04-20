@@ -67,11 +67,14 @@ async def destroy(req: LifecycleRequest) -> dict:
 
 @router.post("/redeploy")
 async def redeploy(req: LifecycleRequest) -> dict:
-    """Destroy then re-deploy a containerlab topology."""
+    """Destroy then re-deploy a containerlab topology using 'deploy --reconfigure'."""
     _busy_check()
-    extra = ["--cleanup"] if req.cleanup else []
+    # containerlab doesn't have a 'redeploy' command. Use 'deploy --reconfigure'.
+    extra = ["--reconfigure"]
+    if req.cleanup:
+        extra.append("--cleanup")
     try:
-        run_id = await start_lifecycle("redeploy", req.topology_file, extra, _broadcast)
+        run_id = await start_lifecycle("deploy", req.topology_file, extra, _broadcast)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     return {"run_id": run_id}
