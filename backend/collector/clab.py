@@ -79,8 +79,19 @@ def inspect_lab(topology_file: str | None = None) -> list[ClabNode]:
     nodes: list[ClabNode] = []
 
     # containerlab inspect JSON format varies slightly by version
-    # Try top-level list first, then "containers" key
-    containers = data if isinstance(data, list) else data.get("containers", [])
+    # 1. Top-level list
+    # 2. "containers" key with list
+    # 3. Lab name as key with list (flatten if multiple labs)
+    if isinstance(data, list):
+        containers = data
+    elif "containers" in data:
+        containers = data["containers"]
+    else:
+        # Flatten all values if they are lists
+        containers = []
+        for val in data.values():
+            if isinstance(val, list):
+                containers.extend(val)
 
     for container in containers:
         name = container.get("name") or container.get("longname", "")
@@ -101,9 +112,21 @@ def inspect_lab(topology_file: str | None = None) -> list[ClabNode]:
             logger.warning("No management IP for node '%s', skipping", name)
             continue
 
-        # Try to get the short name from labels
-        labels = container.get("labels", {})
+        # Try to get the short name from labels (case-insensitive keys)
+        labels = container.get("labels") or container.get("Labels") or {}
         short_name = labels.get("clab-node-name")
+
+        if not short_name:
+            # Fallback: try to derive from name and lab_name
+            # containerlab usually names containers as clab-<lab_name>-<node_name>
+            lab_name = container.get("lab_name")
+            full_name = container.get("name") or container.get("Names", [""])[0]
+            if lab_name and full_name:
+                prefix = f"clab-{lab_name}-"
+                if full_name.startswith(prefix):
+                    short_name = full_name[len(prefix):]
+                elif full_name.startswith(lab_name + "-"): # some versions/configs
+                    short_name = full_name[len(lab_name)+1:]
 
         vendor = _detect_vendor(image, kind)
         nodes.append(ClabNode(name=name, mgmt_ip=mgmt_ip, vendor=vendor, state=state, short_name=short_name))

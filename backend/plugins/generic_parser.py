@@ -42,12 +42,13 @@ class GenericParser:
         try:
             data = json.loads(raw)
         except:
-            return {"default": {"routing_table": []}}
+            return {"default": []}
             
         routes = []
         for r in data:
             dst = r.get("dst")
-            if dst == "default": dst = "0.0.0.0/0"
+            if not dst or dst == "default":
+                dst = "0.0.0.0/0"
             
             routes.append({
                 "prefix": dst,
@@ -55,7 +56,7 @@ class GenericParser:
                 "protocol": "static" if r.get("gateway") else "connected",
                 "via_interface": r.get("dev")
             })
-        return {"default": {"routing_table": routes}}
+        return {"default": routes}
 
     def parse_acls(self, outputs: dict[str, str]) -> dict[str, list]:
         return {}

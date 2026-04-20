@@ -57,20 +57,38 @@ class FrrParser:
         interfaces: list[InterfaceData] = []
         for iface_name, iface in data.items():
             ip = self._extract_ip(iface)
-            state_raw = iface.get("operstate", "")
+            
+            # Try multiple status fields used by different FRR versions
+            state_raw = (
+                iface.get("operationalStatus") or 
+                iface.get("administrativeStatus") or 
+                iface.get("operstate", "")
+            )
             if not state_raw and isinstance(iface.get("linkUp"), bool):
                 state_raw = "up" if iface["linkUp"] else "down"
-            state = "up" if state_raw.lower() == "up" else "down"
+            
+            state = "up" if str(state_raw).lower() == "up" else "down"
             interfaces.append(InterfaceData(name=iface_name, ip=ip, state=state))
         return interfaces
 
     def _extract_ip(self, iface: dict) -> str | None:
-        for addr_entry in iface.get("addresses", []):
-            if addr_entry.get("family") in ("inet", "inet4", None):
+        # Some versions use 'ipAddresses', others use 'addresses'
+        addrs = iface.get("ipAddresses") or iface.get("addresses") or []
+        for addr_entry in addrs:
+            # If it's a simple dict with 'address' containing CIDR
+            if isinstance(addr_entry, dict):
+                addr_str = addr_entry.get("address") or addr_entry.get("ip")
+                if addr_str and "/" in addr_str:
+                    # Check if it's IPv4
+                    if ":" not in addr_str:
+                        return addr_str
+                
+                # Fallback to separate address/prefix fields
                 address = addr_entry.get("address") or addr_entry.get("ip")
                 prefix = addr_entry.get("prefixLength") or addr_entry.get("prefix")
                 if address and prefix is not None:
-                    return f"{address}/{prefix}"
+                    if ":" not in str(address):
+                        return f"{address}/{prefix}"
         return None
 
     # ------------------------------------------------------------------

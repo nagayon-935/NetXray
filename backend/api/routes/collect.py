@@ -50,10 +50,10 @@ def collect_topology(req: CollectRequest) -> dict:
 
             try:
                 driver = driver_cls()
-                # Prefer short_name for clab exec, fall back to full name
-                node_identifier = node.short_name or node.name
+                # Use full container name (node.name) for collection.
+                # Drivers using 'docker exec' require the full name.
                 driver_outputs[node.name] = driver.collect(
-                    node.mgmt_ip, node_creds, node_name=node_identifier
+                    node.mgmt_ip, node_creds, node_name=node.name
                 )
             except Exception as exc:
                 logger.warning("Failed to collect from %s: %s", node.name, exc)

@@ -112,6 +112,7 @@ def build_ir(
 
 
 def _infer_node_type(vendor: str) -> str:
-    if vendor in ("frr", "arista"):
+    if vendor in ("frr", "arista", "cisco_xr", "juniper_junos"):
         return "router"
-    return "generic"
+    # Map generic/linux nodes to 'host' to match IR schema enum: [router, switch, host]
+    return "host"

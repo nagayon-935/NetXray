@@ -44,8 +44,8 @@ def build_links(node_interfaces: dict[str, list[InterfaceData]]) -> list[Link]:
             except ValueError:
                 continue
             prefix_len = interface_net.network.prefixlen
-            # Only consider P2P prefixes (/29 .. /31) or explicit /30, /31
-            if prefix_len < 29:
+            # Allow /24 up to /31 for P2P inference
+            if prefix_len < 24:
                 continue
             net_key = str(interface_net.network)
             net_to_endpoints.setdefault(net_key, []).append(
