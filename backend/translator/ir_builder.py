@@ -13,6 +13,7 @@ def build_ir(
     nodes: list,  # list[ClabNode]
     driver_outputs: dict[str, dict[str, str]],
     parser_registry: dict[str, type],
+    clab_links: list = None, # list[ClabLink]
 ) -> dict[str, Any]:
     """
     Build a NetXray-IR dict from collected outputs.
@@ -20,6 +21,7 @@ def build_ir(
     nodes            : ClabNode list from clab.inspect_lab()
     driver_outputs   : {node_name: {command -> output}}
     parser_registry  : {vendor -> VendorParser class}
+    clab_links       : optional explicit link list from .clab.yml
     """
     ir_nodes: list[dict] = []
     node_interfaces: dict[str, list[InterfaceData]] = {}
@@ -110,16 +112,40 @@ def build_ir(
         ir_nodes.append(node_entry)
 
     # Build links
-    links = build_links(node_interfaces)
-    ir_links = [
-        {
-            "id": link.id,
-            "source": {"node": link.source.node, "interface": link.source.interface},
-            "target": {"node": link.target.node, "interface": link.target.interface},
-            "state": link.state,
-        }
-        for link in links
-    ]
+    if clab_links:
+        ir_links = []
+        # Create a map for quick lookup: short_name -> full container name
+        name_map = {}
+        for node in nodes:
+            if hasattr(node, "short_name") and node.short_name:
+                name_map[node.short_name] = node.name
+            # Fallback if short_name was not detected but name contains it
+            name_map[node.name.split("-")[-1]] = node.name
+            name_map[node.name] = node.name
+
+        for cl in clab_links:
+            # Map clab short names to full IDs
+            src_node = name_map.get(cl.source_node, cl.source_node)
+            dst_node = name_map.get(cl.target_node, cl.target_node)
+            
+            link_id = f"link-{src_node}-{cl.source_iface}-{dst_node}-{cl.target_iface}"
+            ir_links.append({
+                "id": link_id,
+                "source": {"node": src_node, "interface": cl.source_iface},
+                "target": {"node": dst_node, "interface": cl.target_iface},
+                "state": "up",
+            })
+    else:
+        links = build_links(node_interfaces)
+        ir_links = [
+            {
+                "id": link.id,
+                "source": {"node": link.source.node, "interface": link.source.interface},
+                "target": {"node": link.target.node, "interface": link.target.interface},
+                "state": link.state,
+            }
+            for link in links
+        ]
 
     return {
         "ir_version": "0.1.0",

@@ -5,9 +5,18 @@ import json
 import logging
 import subprocess
 from dataclasses import dataclass
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Any
+import yaml
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ClabLink:
+    source_node: str
+    source_iface: str
+    target_node: str
+    target_iface: str
 
 
 @dataclass
@@ -203,3 +212,38 @@ def exec_node(node_name: str, commands: list[str]) -> dict[str, str]:
             logger.error("Failed to exec '%s' in node %s: %s", cmd_str, node_name, exc)
             results[cmd_str] = f"ERROR: {exc}"
     return results
+
+def get_links_from_topo(topology_file: str) -> list[ClabLink]:
+    """Parse .clab.yml and return list of links (endpoints)."""
+    import os
+    if not topology_file or not os.path.isfile(topology_file):
+        return []
+
+    try:
+        with open(topology_file, "r") as f:
+            topo = yaml.safe_load(f)
+    except Exception as e:
+        logger.error("Failed to load topo file %s: %s", topology_file, e)
+        return []
+
+    clab_links = []
+    links_raw = topo.get("topology", {}).get("links", [])
+    for link in links_raw:
+        endpoints = link.get("endpoints")
+        if not endpoints or len(endpoints) != 2:
+            continue
+
+        try:
+            # endpoints: ["node1:eth1", "node2:eth2"]
+            src_node, src_iface = endpoints[0].split(":")
+            dst_node, dst_iface = endpoints[1].split(":")
+            clab_links.append(ClabLink(
+                source_node=src_node,
+                source_iface=src_iface,
+                target_node=dst_node,
+                target_iface=dst_iface
+            ))
+        except (ValueError, AttributeError):
+            continue
+
+    return clab_links
