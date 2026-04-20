@@ -4,12 +4,13 @@ Commands consumed:
   - show interface json       -> interfaces
   - show ip route json        -> default VRF routes
   - show ip route vrf all json -> all VRF routes
-  - show running-config       -> ACL rules (regex)
+  - show running-config       -> ACL / BGP / OSPF (regex)
 """
 
 import json
 import logging
 import re
+from typing import Any
 
 from translator.parser_base import AclRuleData, InterfaceData, RouteData
 
@@ -193,3 +194,183 @@ class FrrParser:
                 ))
 
         return {k: v for k, v in acls.items() if v}
+
+    # ------------------------------------------------------------------
+    # BGP  (from running-config text)
+    # ------------------------------------------------------------------
+
+    def parse_bgp(self, raw_outputs: dict[str, str]) -> dict[str, Any] | None:
+        raw = raw_outputs.get("show running-config") or raw_outputs.get("show_running_config")
+        if not raw:
+            return None
+
+        local_as: int | None = None
+        router_id: str = ""
+        sessions: list[dict[str, Any]] = []
+        # peer_ip -> list[str] of address-families
+        afi_map: dict[str, list[str]] = {}
+
+        in_bgp = False
+        current_afi: str | None = None
+
+        for line in raw.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("!"):
+                continue
+
+            # Enter BGP block
+            m = re.match(r"^router bgp\s+(\d+)", stripped)
+            if m:
+                in_bgp = True
+                local_as = int(m.group(1))
+                current_afi = None
+                continue
+
+            # Exit BGP block on a new top-level "router ..." / "interface ..." / unindented keyword
+            if in_bgp and line and not line[0].isspace() and not stripped.startswith("router bgp"):
+                in_bgp = False
+                current_afi = None
+
+            if not in_bgp:
+                continue
+
+            m = re.match(r"^bgp router-id\s+(\S+)", stripped)
+            if m:
+                router_id = m.group(1)
+                continue
+
+            m = re.match(r"^address-family\s+(\S+)(?:\s+(\S+))?", stripped)
+            if m:
+                family = m.group(1).lower()
+                sub = (m.group(2) or "").lower()
+                current_afi = f"{family}_{sub}" if sub else family
+                continue
+
+            if stripped.startswith("exit-address-family"):
+                current_afi = None
+                continue
+
+            m = re.match(r"^neighbor\s+(\S+)\s+remote-as\s+(\d+)", stripped)
+            if m:
+                peer = m.group(1)
+                remote_as = int(m.group(2))
+                # Skip peer-group definitions: remote-as used with non-IP names
+                if not _is_ip(peer):
+                    continue
+                sessions.append({
+                    "peer_ip": peer,
+                    "remote_as": remote_as,
+                    "state": "unknown",
+                })
+                continue
+
+            # Inside address-family: "neighbor <peer> activate"
+            m = re.match(r"^neighbor\s+(\S+)\s+activate", stripped)
+            if m and current_afi:
+                peer = m.group(1)
+                if _is_ip(peer):
+                    afi_map.setdefault(peer, []).append(current_afi)
+
+        if local_as is None:
+            return None
+
+        for session in sessions:
+            afis = afi_map.get(session["peer_ip"])
+            if afis:
+                session["address_families"] = afis
+
+        return {
+            "local_as": local_as,
+            "router_id": router_id,
+            "sessions": sessions,
+        }
+
+    # ------------------------------------------------------------------
+    # OSPF  (from running-config text)
+    # ------------------------------------------------------------------
+
+    def parse_ospf(self, raw_outputs: dict[str, str]) -> dict[str, Any] | None:
+        raw = raw_outputs.get("show running-config") or raw_outputs.get("show_running_config")
+        if not raw:
+            return None
+
+        router_id: str = ""
+        process_id: int | None = None
+        interfaces: list[dict[str, Any]] = []
+        network_areas: list[tuple[str, str]] = []
+
+        in_ospf = False
+        current_iface: str | None = None
+        iface_buf: dict[str, dict[str, Any]] = {}
+        has_ospf_block = False
+
+        for line in raw.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("!"):
+                continue
+
+            # router ospf [<id>]
+            m = re.match(r"^router ospf(?:\s+(\d+))?$", stripped)
+            if m:
+                in_ospf = True
+                has_ospf_block = True
+                if m.group(1):
+                    process_id = int(m.group(1))
+                current_iface = None
+                continue
+
+            # Entering another top-level block
+            if line and not line[0].isspace():
+                in_ospf = False
+                m_iface = re.match(r"^interface\s+(\S+)", stripped)
+                current_iface = m_iface.group(1) if m_iface else None
+
+            if in_ospf:
+                m = re.match(r"^(?:ospf\s+)?router-id\s+(\S+)", stripped)
+                if m:
+                    router_id = m.group(1)
+                    continue
+                m = re.match(r"^network\s+(\S+)\s+area\s+(\S+)", stripped)
+                if m:
+                    network_areas.append((m.group(1), m.group(2)))
+                    continue
+
+            if current_iface is not None:
+                m = re.match(r"^ip ospf area\s+(\S+)", stripped)
+                if m:
+                    iface_buf.setdefault(current_iface, {"name": current_iface})["area"] = m.group(1)
+                    continue
+                m = re.match(r"^ip ospf cost\s+(\d+)", stripped)
+                if m:
+                    iface_buf.setdefault(current_iface, {"name": current_iface})["cost"] = int(m.group(1))
+                    continue
+                m = re.match(r"^ip ospf network\s+(\S+)", stripped)
+                if m:
+                    iface_buf.setdefault(current_iface, {"name": current_iface})["network_type"] = m.group(1)
+                    continue
+                m = re.match(r"^ip ospf hello-interval\s+(\d+)", stripped)
+                if m:
+                    iface_buf.setdefault(current_iface, {"name": current_iface})["hello_interval"] = int(m.group(1))
+                    continue
+                m = re.match(r"^ip ospf dead-interval\s+(\d+)", stripped)
+                if m:
+                    iface_buf.setdefault(current_iface, {"name": current_iface})["dead_interval"] = int(m.group(1))
+                    continue
+
+        if not has_ospf_block and not iface_buf:
+            return None
+
+        # per-interface entries first, then any network-based entries that weren't already per-iface
+        for iface in iface_buf.values():
+            if "area" in iface:
+                interfaces.append(iface)
+
+        return {
+            "router_id": router_id,
+            "process_id": process_id,
+            "interfaces": interfaces,
+        }
+
+
+def _is_ip(value: str) -> bool:
+    return bool(re.match(r"^\d+\.\d+\.\d+\.\d+$", value) or ":" in value)

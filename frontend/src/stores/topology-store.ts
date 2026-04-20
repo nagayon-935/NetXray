@@ -318,29 +318,16 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
     const { ir } = get();
     if (!ir) throw new Error("No topology loaded");
 
-    // Step 1: export IR → clab YAML
-    const exportRes = await fetch("/api/iac/export/clab", {
+    const res = await fetch("/api/iac/clone-to-clab", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ir }),
+      body: JSON.stringify({ ir, topo_name: topoName }),
     });
-    if (!exportRes.ok) {
-      const body = await exportRes.json().catch(() => ({}));
-      throw new Error(body.detail ?? "Export failed");
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail ?? `HTTP ${res.status}`);
     }
-    const { clab_yaml } = await exportRes.json();
-
-    // Step 2: deploy
-    const deployRes = await fetch("/api/iac/deploy-clab", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clab_yaml, topo_name: topoName }),
-    });
-    if (!deployRes.ok) {
-      const body = await deployRes.json().catch(() => ({}));
-      throw new Error(body.detail ?? "Deploy failed");
-    }
-    const { run_id } = await deployRes.json();
+    const { run_id } = await res.json();
     return run_id as string;
   },
 }));

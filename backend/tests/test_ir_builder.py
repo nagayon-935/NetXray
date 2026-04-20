@@ -28,6 +28,7 @@ def make_outputs():
             "show interfaces": (FIXTURES / "arista_show_interfaces.json").read_text(),
             "show ip route": (FIXTURES / "arista_show_ip_route.json").read_text(),
             "show ip access-lists": (FIXTURES / "arista_show_ip_access_lists.json").read_text(),
+            "show running-config": (FIXTURES / "arista_running_config.txt").read_text(),
         },
     }
 
@@ -62,6 +63,27 @@ def test_acls_merged():
     assert "ACL_BLOCK_SSH" in acls
     # Arista ACLs
     assert "ACL_SERVER_PROTECT" in acls
+
+
+def test_bgp_populated():
+    ir = build_ir(make_nodes(), make_outputs(), PARSER_REGISTRY)
+    nodes = {n["id"]: n for n in ir["topology"]["nodes"]}
+    assert nodes["r1"]["bgp"]["local_as"] == 65001
+    assert nodes["r2"]["bgp"]["local_as"] == 65002
+
+
+def test_ospf_populated():
+    ir = build_ir(make_nodes(), make_outputs(), PARSER_REGISTRY)
+    nodes = {n["id"]: n for n in ir["topology"]["nodes"]}
+    assert nodes["r1"]["ospf"]["router_id"] == "1.1.1.1"
+    assert nodes["r2"]["ospf"]["router_id"] == "2.2.2.2"
+
+
+def test_raw_config_preserved():
+    ir = build_ir(make_nodes(), make_outputs(), PARSER_REGISTRY)
+    nodes = {n["id"]: n for n in ir["topology"]["nodes"]}
+    assert "router bgp 65001" in nodes["r1"]["raw_config"]
+    assert "router bgp 65002" in nodes["r2"]["raw_config"]
 
 
 def test_schema_validation():

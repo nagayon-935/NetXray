@@ -68,3 +68,63 @@ def test_delete_topology(tmp_path, monkeypatch):
 
     resp = client.get("/api/topology/to-delete")
     assert resp.status_code == 404
+
+
+def _minimal_ir_for_clone(vendor: str = "frr") -> dict:
+    return {
+        "ir_version": "0.2.0",
+        "metadata": {"name": "t1"},
+        "topology": {
+            "nodes": [
+                {
+                    "id": "r1",
+                    "type": "router",
+                    "vendor": vendor,
+                    "interfaces": {},
+                    "raw_config": "hostname R1\nrouter bgp 65001\n!\n",
+                }
+            ],
+            "links": [],
+        },
+    }
+
+
+def test_clone_to_clab_happy(tmp_path, monkeypatch):
+    import api.routes.iac as iac_module
+
+    async def fake_start_lifecycle(action, topo_path, extra, broadcast):
+        return "fake-run-id"
+
+    monkeypatch.setattr(iac_module, "start_lifecycle", fake_start_lifecycle)
+    monkeypatch.setattr(iac_module, "is_running", lambda: False)
+    # Redirect clab-exports dir to tmp_path
+    fake_settings = type("S", (), {"data_dir": tmp_path / "data"})()
+    fake_settings.data_dir.mkdir(parents=True)
+    monkeypatch.setattr(iac_module, "settings", fake_settings)
+
+    resp = client.post(
+        "/api/iac/clone-to-clab",
+        json={"ir": _minimal_ir_for_clone(), "topo_name": "clone-test"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["run_id"] == "fake-run-id"
+    assert body["topology_file"].endswith(".clab.yml")
+
+
+def test_clone_to_clab_rejects_empty_ir():
+    resp = client.post(
+        "/api/iac/clone-to-clab",
+        json={"ir": {"topology": {"nodes": [], "links": []}}, "topo_name": "x"},
+    )
+    assert resp.status_code == 400
+    assert "no nodes" in resp.json()["detail"]
+
+
+def test_clone_to_clab_rejects_unsupported_vendor():
+    resp = client.post(
+        "/api/iac/clone-to-clab",
+        json={"ir": _minimal_ir_for_clone(vendor="cisco_xr"), "topo_name": "x"},
+    )
+    assert resp.status_code == 400
+    assert "cisco_xr" in resp.json()["detail"]

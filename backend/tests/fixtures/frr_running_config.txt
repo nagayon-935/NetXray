@@ -5,10 +5,13 @@ log syslog informational
 !
 interface eth0
  ip address 10.0.12.1/30
+ ip ospf area 0
+ ip ospf cost 10
 !
 interface eth1
  ip address 10.0.13.1/30
  ip access-group ACL_BLOCK_SSH in
+ ip ospf area 0
 !
 ip access-list ACL_BLOCK_SSH
  10 deny tcp any any eq 22
@@ -18,6 +21,20 @@ ip access-list ACL_WEB_ONLY
  10 permit tcp 10.0.0.0/8 any eq 80
  20 permit tcp 10.0.0.0/8 any eq 443
  30 deny any any any
+!
+router bgp 65001
+ bgp router-id 1.1.1.1
+ neighbor 10.0.12.2 remote-as 65002
+ neighbor 10.0.13.2 remote-as 65001
+ !
+ address-family ipv4 unicast
+  neighbor 10.0.12.2 activate
+  neighbor 10.0.13.2 activate
+ exit-address-family
+!
+router ospf
+ ospf router-id 1.1.1.1
+ network 10.0.0.0/8 area 0
 !
 line vty
 !

@@ -34,6 +34,42 @@ def test_parse_acls(frr_outputs):
     assert ssh_rules[0]["dst_port"] == 22
 
 
+def test_parse_bgp(frr_outputs):
+    parser = FrrParser()
+    bgp = parser.parse_bgp(frr_outputs)
+    assert bgp is not None
+    assert bgp["local_as"] == 65001
+    assert bgp["router_id"] == "1.1.1.1"
+    peers = {s["peer_ip"]: s for s in bgp["sessions"]}
+    assert set(peers) == {"10.0.12.2", "10.0.13.2"}
+    assert peers["10.0.12.2"]["remote_as"] == 65002
+    assert peers["10.0.12.2"]["state"] == "unknown"
+    # address-family tagging
+    assert "ipv4_unicast" in peers["10.0.12.2"]["address_families"]
+
+
+def test_parse_bgp_absent():
+    parser = FrrParser()
+    assert parser.parse_bgp({"show running-config": "hostname R1\n!\n"}) is None
+
+
+def test_parse_ospf(frr_outputs):
+    parser = FrrParser()
+    ospf = parser.parse_ospf(frr_outputs)
+    assert ospf is not None
+    assert ospf["router_id"] == "1.1.1.1"
+    iface_map = {i["name"]: i for i in ospf["interfaces"]}
+    assert "eth0" in iface_map
+    assert iface_map["eth0"]["area"] == "0"
+    assert iface_map["eth0"]["cost"] == 10
+    assert iface_map["eth1"]["area"] == "0"
+
+
+def test_parse_ospf_absent():
+    parser = FrrParser()
+    assert parser.parse_ospf({"show running-config": "hostname R1\n!\n"}) is None
+
+
 def test_kernel_routes_excluded(frr_outputs):
     """Kernel routes should be filtered out."""
     import json

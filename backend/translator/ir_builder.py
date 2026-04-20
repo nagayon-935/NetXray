@@ -30,6 +30,9 @@ def build_ir(
         outputs = driver_outputs.get(node.name, {})
         parser_cls = parser_registry.get(vendor)
 
+        bgp: dict[str, Any] | None = None
+        ospf: dict[str, Any] | None = None
+
         if parser_cls is None:
             logger.warning("No parser for vendor '%s', skipping node %s", vendor, node.name)
             ifaces_raw: list[InterfaceData] = []
@@ -40,6 +43,16 @@ def build_ir(
             ifaces_raw = parser.parse_interfaces(outputs)
             vrfs = parser.parse_routes(outputs)
             acls = parser.parse_acls(outputs)
+            if hasattr(parser, "parse_bgp"):
+                try:
+                    bgp = parser.parse_bgp(outputs)
+                except Exception as exc:
+                    logger.warning("parse_bgp failed for %s: %s", node.name, exc)
+            if hasattr(parser, "parse_ospf"):
+                try:
+                    ospf = parser.parse_ospf(outputs)
+                except Exception as exc:
+                    logger.warning("parse_ospf failed for %s: %s", node.name, exc)
 
         # Merge ACLs
         all_acls.update(acls)
@@ -78,14 +91,23 @@ def build_ir(
         if not vrfs_ir:
             vrfs_ir["default"] = {"routing_table": []}
 
-        ir_nodes.append({
+        node_entry: dict[str, Any] = {
             "id": node.name,
             "type": _infer_node_type(vendor),
             "vendor": vendor,
             "hostname": node.name,
             "interfaces": ifaces_ir,
             "vrfs": vrfs_ir,
-        })
+        }
+        if bgp:
+            node_entry["bgp"] = bgp
+        if ospf:
+            node_entry["ospf"] = ospf
+        # Preserve raw running-config for clone-to-clab (Phase 2)
+        raw_config = outputs.get("show running-config") or outputs.get("show_running_config")
+        if raw_config:
+            node_entry["raw_config"] = raw_config
+        ir_nodes.append(node_entry)
 
     # Build links
     links = build_links(node_interfaces)

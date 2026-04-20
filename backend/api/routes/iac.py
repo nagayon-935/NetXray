@@ -1,20 +1,44 @@
 """IaC route — clab YAML export + direct deploy from IR.
 
-Used by the topology editor's "Apply to clab" flow:
-1. Frontend POSTs current IR to /iac/export/clab → receives clab YAML
-2. Frontend POSTs YAML to /iac/deploy-clab → starts containerlab deploy
+Flows:
+1. Preview: POST /iac/export/clab  → IR → YAML text (no side effects)
+2. Clone:   POST /iac/clone-to-clab → writes YAML + per-node configs and
+           launches `containerlab deploy`. Used by "Apply to clab" and
+           "Scan & Clone".
 """
+
+from pathlib import Path
+from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Dict, Any
 
 from api.config import settings
-from translator.iac.clab_exporter import export_to_clab
+from api.schemas import CloneToClabRequest
 from collector.clab_lifecycle import active_run_id, is_running, start_lifecycle
 from collector.telemetry_manager import telemetry_manager
+from translator.iac.clab_exporter import (
+    build_clab_yaml,
+    export_to_clab,
+    validate_ir_for_clone,
+)
 
 router = APIRouter(prefix="/iac", tags=["iac"])
+
+
+def _clab_exports_dir() -> Path:
+    path = settings.data_dir.parent / "clab-exports"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _safe(name: str) -> str:
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+    return safe or "netxray-clone"
+
+
+async def _broadcast(run_id: str, payload: dict) -> None:
+    await telemetry_manager.broadcast_lab_log(run_id, payload)
 
 
 class IacExportClabRequest(BaseModel):
@@ -23,10 +47,9 @@ class IacExportClabRequest(BaseModel):
 
 @router.post("/export/clab")
 async def export_clab(req: IacExportClabRequest):
-    """Export NetXray-IR to containerlab YAML."""
+    """Export NetXray-IR to containerlab YAML (preview only — no files written)."""
     try:
-        clab_yaml = export_to_clab(req.ir)
-        return {"clab_yaml": clab_yaml}
+        return {"clab_yaml": build_clab_yaml(req.ir)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Clab export failed: {str(e)}")
 
@@ -36,20 +59,14 @@ class DeployClabRequest(BaseModel):
     topo_name: str = "netxray-exported"
 
 
-async def _broadcast(run_id: str, payload: dict) -> None:
-    await telemetry_manager.broadcast_lab_log(run_id, payload)
-
-
 @router.post("/deploy-clab")
 async def deploy_clab_direct(req: DeployClabRequest) -> dict:
-    """Save YAML to disk and deploy via containerlab. Returns run_id for WS log streaming."""
+    """[legacy] Save YAML to disk and deploy via containerlab. Prefer /clone-to-clab."""
     if is_running():
         raise HTTPException(status_code=409, detail=f"Lifecycle op in progress (run_id={active_run_id()})")
 
-    clab_dir = settings.data_dir.parent / "clab-exports"
-    clab_dir.mkdir(parents=True, exist_ok=True)
-    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in req.topo_name)
-    topo_path = clab_dir / f"{safe_name}.clab.yml"
+    safe_name = _safe(req.topo_name)
+    topo_path = _clab_exports_dir() / f"{safe_name}.clab.yml"
     topo_path.write_text(req.clab_yaml, encoding="utf-8")
 
     try:
@@ -57,3 +74,35 @@ async def deploy_clab_direct(req: DeployClabRequest) -> dict:
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     return {"run_id": run_id, "topology_file": str(topo_path)}
+
+
+@router.post("/clone-to-clab")
+async def clone_to_clab(req: CloneToClabRequest) -> dict:
+    """Write a clab project (YAML + per-node configs) and deploy it.
+
+    Returns {run_id, topology_file}. Frontend attaches run_id to the WS log stream
+    via /api/ws/lab-logs/{run_id}.
+    """
+    errors = validate_ir_for_clone(req.ir)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+
+    if is_running():
+        raise HTTPException(
+            status_code=409, detail=f"Lifecycle op in progress (run_id={active_run_id()})"
+        )
+
+    safe_name = _safe(req.topo_name)
+    output_dir = _clab_exports_dir() / safe_name
+
+    try:
+        yaml_path = export_to_clab(req.ir, output_dir)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Clab export failed: {exc}")
+
+    try:
+        run_id = await start_lifecycle("deploy", str(yaml_path), [], _broadcast)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    return {"run_id": run_id, "topology_file": str(yaml_path)}

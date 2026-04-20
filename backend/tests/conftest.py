@@ -29,4 +29,5 @@ def arista_outputs() -> dict[str, str]:
         "show interfaces": load_fixture("arista_show_interfaces.json"),
         "show ip route": load_fixture("arista_show_ip_route.json"),
         "show ip access-lists": load_fixture("arista_show_ip_access_lists.json"),
+        "show running-config": load_fixture("arista_running_config.txt"),
     }

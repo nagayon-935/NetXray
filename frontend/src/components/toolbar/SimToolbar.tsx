@@ -3,6 +3,7 @@ import { useTopologyStore } from "../../stores/topology-store";
 import { useViewStore } from "../../stores/view-store";
 import { VIEW_DEFS, type ViewId } from "../../lib/views";
 import { useLayerStore, LAYER_DEFS, type LayerId } from "../../stores/layer-store";
+import { useLabStore } from "../../stores/lab-store";
 import { useIRLoad } from "../../hooks/useIRLoad";
 import type { LayoutPreset } from "../../hooks/useTopologyLayout";
 
@@ -24,9 +25,14 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
   const layers = useLayerStore((s) => s.layers);
   const toggleLayer = useLayerStore((s) => s.toggleLayer);
 
+  const setLabRunId = useLabStore((s) => s.setRunId);
+  const setLabStatus = useLabStore((s) => s.setStatus);
+  const setLabTopologyFile = useLabStore((s) => s.setTopologyFile);
+
   const { handleFile, handleApiLoad, fetchTopologyList } = useIRLoad();
   const [apiTopos, setApiTopos] = useState<{ name: string; node_count: number }[] | null>(null);
   const [showApiMenu, setShowApiMenu] = useState(false);
+  const [cloning, setCloning] = useState(false);
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -162,6 +168,67 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
                   className="w-full bg-blue-500 text-white text-[10px] font-bold py-1 rounded hover:bg-blue-600"
                 >
                   SCAN &amp; LOAD
+                </button>
+
+                <input
+                  type="text"
+                  placeholder="new-topology-name"
+                  className="w-full text-[10px] font-mono px-2 py-1 border rounded"
+                  id="clab-clone-name-input"
+                  onClick={(e) => e.stopPropagation()}
+                  defaultValue="netxray-clone"
+                />
+                <button
+                  disabled={cloning}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const pathInput = document.getElementById("clab-path-input") as HTMLInputElement;
+                    const nameInput = document.getElementById("clab-clone-name-input") as HTMLInputElement;
+                    const path = pathInput.value;
+                    const topoName = nameInput.value || "netxray-clone";
+                    if (!path) return;
+                    setCloning(true);
+                    try {
+                      const collectRes = await fetch("/api/collect", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          topology_name: "collected-lab",
+                          clab_topology: path,
+                        }),
+                      });
+                      if (!collectRes.ok) {
+                        const body = await collectRes.json().catch(() => ({}));
+                        throw new Error(body.detail ?? "Collect failed");
+                      }
+                      const collectedIr = await collectRes.json();
+                      loadIR(collectedIr);
+
+                      const cloneRes = await fetch("/api/iac/clone-to-clab", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ ir: collectedIr, topo_name: topoName }),
+                      });
+                      if (!cloneRes.ok) {
+                        const body = await cloneRes.json().catch(() => ({}));
+                        throw new Error(body.detail ?? "Clone failed");
+                      }
+                      const { run_id, topology_file } = await cloneRes.json();
+                      setLabRunId(run_id);
+                      setLabStatus("deploying");
+                      if (topology_file) setLabTopologyFile(topology_file);
+                      setActivePanel("lab");
+                      setShowApiMenu(false);
+                    } catch (err) {
+                      alert(`Clone failed: ${err instanceof Error ? err.message : "unknown"}`);
+                    } finally {
+                      setCloning(false);
+                    }
+                  }}
+                  className="w-full bg-emerald-500 text-white text-[10px] font-bold py-1 rounded hover:bg-emerald-600 disabled:opacity-50"
+                  title="Collect IR from the running lab and deploy a mirrored containerlab copy"
+                >
+                  {cloning ? "CLONING..." : "SCAN & CLONE"}
                 </button>
               </div>
             </div>

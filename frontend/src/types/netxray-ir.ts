@@ -26,6 +26,8 @@ export interface Node {
   ospf?: OspfConfig;
   srv6?: Srv6Config;
   evpn?: EvpnConfig;
+  // Preserved vendor running-config (used by clone-to-clab)
+  raw_config?: string;
   [key: string]: unknown; // forward-compatible unknown fields
 }
 
