@@ -23,7 +23,14 @@ def collect_topology(req: CollectRequest) -> dict:
         from translator.ir_builder import build_ir
         from translator.parsers import PARSER_REGISTRY
 
-        nodes = inspect_lab(req.clab_topology)
+        topo_path = req.clab_topology
+        if topo_path and not topo_path.startswith("/") and not topo_path.startswith("."):
+            # Resolve relative path against labs directory
+            potential_path = settings.clab_labs_dir / topo_path
+            if potential_path.exists():
+                topo_path = str(potential_path)
+
+        nodes = inspect_lab(topo_path)
         if not nodes:
             raise HTTPException(status_code=500, detail="No nodes found in containerlab topology")
 

@@ -8,8 +8,12 @@ class GenericParser:
     vendor_name = "generic"
 
     def parse_interfaces(self, outputs: dict[str, str]) -> list[InterfaceData]:
-        raw = outputs.get("ip -j addr", "[]")
+        raw = outputs.get("ip -j addr", "[]").strip()
         try:
+            if not raw.startswith("[") and "[" in raw:
+                raw = raw[raw.find("["):]
+            if not raw.endswith("]") and "]" in raw:
+                raw = raw[:raw.rfind("]") + 1]
             data = json.loads(raw)
         except:
             return []
@@ -38,8 +42,13 @@ class GenericParser:
         return ifaces
 
     def parse_routes(self, outputs: dict[str, str]) -> dict[str, list]:
-        raw = outputs.get("ip -j route", "[]")
+        raw = outputs.get("ip -j route", "[]").strip()
         try:
+            # Handle possible logs wrapping the JSON
+            if not raw.startswith("[") and "[" in raw:
+                raw = raw[raw.find("["):]
+            if not raw.endswith("]") and "]" in raw:
+                raw = raw[:raw.rfind("]") + 1]
             data = json.loads(raw)
         except:
             return {"default": []}

@@ -63,10 +63,22 @@ async def start_lifecycle(
 
 async def _run(run_id: str, cmd: list[str], broadcast: BroadcastFn) -> None:
     try:
+        # Infer working directory from topology file (-t flag)
+        cwd = None
+        try:
+            t_idx = cmd.index("-t")
+            topo_path = cmd[t_idx + 1]
+            import os
+            if os.path.isabs(topo_path):
+                cwd = os.path.dirname(topo_path)
+        except (ValueError, IndexError):
+            pass
+
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            cwd=cwd,
         )
 
         assert proc.stdout is not None

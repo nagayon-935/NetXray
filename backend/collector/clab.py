@@ -66,6 +66,9 @@ def inspect_lab(topology_file: str | None = None) -> list[ClabNode]:
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=True)
+        if not result.stdout.strip():
+            # If stdout is empty, it's not a valid JSON
+            raise RuntimeError(f"containerlab inspect returned empty output. stderr: {result.stderr}")
         data = json.loads(result.stdout)
     except FileNotFoundError:
         raise RuntimeError("containerlab binary not found in PATH")

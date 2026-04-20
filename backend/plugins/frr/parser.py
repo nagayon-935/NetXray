@@ -49,10 +49,11 @@ class FrrParser:
         if not raw:
             return []
         try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            logger.warning("FRR: failed to parse 'show interface json'")
+            data = self._load_json(raw)
+        except Exception as e:
+            logger.warning(f"FRR: failed to parse 'show interface json': {e}")
             return []
+        # ... rest of the logic ...
 
         interfaces: list[InterfaceData] = []
         for iface_name, iface in data.items():
@@ -91,6 +92,17 @@ class FrrParser:
                         return f"{address}/{prefix}"
         return None
 
+    def _load_json(self, text: str) -> dict:
+        text = text.strip()
+        if not text:
+            return {}
+        # If output contains non-JSON junk (like INFO logs), find the first '{' and last '}'
+        if not text.startswith("{") and "{" in text:
+            text = text[text.find("{"):]
+        if not text.endswith("}") and "}" in text:
+            text = text[:text.rfind("}") + 1]
+        return json.loads(text)
+
     # ------------------------------------------------------------------
     # Routes  (returns VRF name -> list[RouteData])
     # ------------------------------------------------------------------
@@ -102,21 +114,21 @@ class FrrParser:
         vrf_all_raw = raw_outputs.get("show ip route vrf all json") or raw_outputs.get("show_ip_route_vrf_all_json")
         if vrf_all_raw:
             try:
-                data = json.loads(vrf_all_raw)
+                data = self._load_json(vrf_all_raw)
                 for vrf_name, table in data.items():
                     vrfs[vrf_name] = self._parse_route_table(table)
                 return vrfs
-            except json.JSONDecodeError:
-                logger.warning("FRR: failed to parse 'show ip route vrf all json'")
+            except Exception as e:
+                logger.warning(f"FRR: failed to parse 'show ip route vrf all json': {e}")
 
         # fallback to default-VRF only
         raw = raw_outputs.get("show ip route json") or raw_outputs.get("show_ip_route_json")
         if raw:
             try:
-                data = json.loads(raw)
+                data = self._load_json(raw)
                 vrfs["default"] = self._parse_route_table(data)
-            except json.JSONDecodeError:
-                logger.warning("FRR: failed to parse 'show ip route json'")
+            except Exception as e:
+                logger.warning(f"FRR: failed to parse 'show ip route json': {e}")
 
         return vrfs
 

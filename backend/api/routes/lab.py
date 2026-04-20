@@ -5,6 +5,7 @@ import re
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
 
+from api.config import settings
 from collector.clab_lifecycle import (
     active_run_id,
     get_run_logs,
@@ -41,13 +42,22 @@ def _busy_check() -> None:
         raise HTTPException(status_code=409, detail=f"Lifecycle op in progress (run_id={active_run_id()})")
 
 
+def _resolve_topo(path: str) -> str:
+    if path and not path.startswith("/") and not path.startswith("."):
+        potential = settings.clab_labs_dir / path
+        if potential.exists():
+            return str(potential)
+    return path
+
+
 @router.post("/deploy")
 async def deploy(req: LifecycleRequest) -> dict:
     """Deploy a containerlab topology. Returns run_id; progress streams via WS."""
     _busy_check()
+    topo = _resolve_topo(req.topology_file)
     extra = ["--reconfigure"] if req.reconfigure else []
     try:
-        run_id = await start_lifecycle("deploy", req.topology_file, extra, _broadcast)
+        run_id = await start_lifecycle("deploy", topo, extra, _broadcast)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     return {"run_id": run_id}
@@ -57,9 +67,10 @@ async def deploy(req: LifecycleRequest) -> dict:
 async def destroy(req: LifecycleRequest) -> dict:
     """Destroy a running containerlab topology."""
     _busy_check()
+    topo = _resolve_topo(req.topology_file)
     extra = ["--cleanup"] if req.cleanup else []
     try:
-        run_id = await start_lifecycle("destroy", req.topology_file, extra, _broadcast)
+        run_id = await start_lifecycle("destroy", topo, extra, _broadcast)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     return {"run_id": run_id}
@@ -69,12 +80,13 @@ async def destroy(req: LifecycleRequest) -> dict:
 async def redeploy(req: LifecycleRequest) -> dict:
     """Destroy then re-deploy a containerlab topology using 'deploy --reconfigure'."""
     _busy_check()
+    topo = _resolve_topo(req.topology_file)
     # containerlab doesn't have a 'redeploy' command. Use 'deploy --reconfigure'.
     extra = ["--reconfigure"]
     if req.cleanup:
         extra.append("--cleanup")
     try:
-        run_id = await start_lifecycle("deploy", req.topology_file, extra, _broadcast)
+        run_id = await start_lifecycle("deploy", topo, extra, _broadcast)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     return {"run_id": run_id}

@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -15,6 +16,8 @@ class Settings(BaseSettings):
     clab_ssh_user: str = ""
     clab_ssh_password: str = ""
     data_dir: Path = Path(__file__).parent.parent / "data" / "topologies"
+    # Base directory for clab topologies, should match host mount for binds consistency
+    clab_labs_dir: Path = Path(os.getenv("NETXRAY_CLAB_LABS_DIR", "/labs"))
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:4173"]
     arista_eapi_port: int = 443
     schema_path: Path = Path(__file__).parent.parent.parent / "schema" / "netxray-ir.schema.json"
