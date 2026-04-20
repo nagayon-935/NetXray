@@ -1,24 +1,23 @@
 /**
- * views/index.ts — View registry for the hierarchical topology layer system.
+ * views/index.ts — View registry for the layered topology system.
  *
- * Each ViewDef describes one topology perspective:
- *  - "physical"  Physical links and all nodes (default)
+ * Each ViewDef describes one perspective on the IR:
+ *  - "l1"        Physical links and all nodes (default)
  *  - "l2"        L2 broadcast domains grouped by EVPN VNI
- *  - "l3"        BGP AS groups with eBGP inter-AS edges
- *  - "overlay"   EVPN VTEP tunnels and SRv6 segments
- *
- * Views produce FlowNode[] / FlowEdge[] with pre-computed positions.
- * TopologyCanvas skips the ELK layout step when a non-physical view is active.
+ *  - "l3"        Pure L3 / IP subnet view
+ *  - "bgp"       BGP AS groups with iBGP/eBGP sessions
+ *  - "ospf-area" OSPF Areas with ABR highlighting
  */
 
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import type { NetXrayIR } from "../../types/netxray-ir";
-import { physicalView } from "./physical-view";
+import { l1View } from "./l1-view";
 import { l2View } from "./l2-view";
 import { l3View } from "./l3-view";
-import { overlayView } from "./overlay-view";
+import { bgpView } from "./bgp-view";
+import { ospfAreaView } from "./ospf-area-view";
 
-export type ViewId = "physical" | "l2" | "l3" | "overlay";
+export type ViewId = "l1" | "l2" | "l3" | "bgp" | "ospf-area";
 
 export interface ViewResult {
   nodes: FlowNode[];
@@ -30,18 +29,12 @@ export interface ViewDef {
   label: string;
   description: string;
   color: string;
-  /**
-   * Whether this view needs the ELK layout pass after derivation.
-   * Physical view defers to ELK; structured views (l2/l3/overlay) pre-compute positions.
-   */
   needsLayout: boolean;
-  /** Return false when the IR doesn't have enough data to make this view meaningful. */
   isAvailable: (ir: NetXrayIR) => boolean;
-  /** Derive nodes + edges from the IR. */
   derive: (ir: NetXrayIR) => ViewResult;
 }
 
-export const VIEW_DEFS: ViewDef[] = [physicalView, l2View, l3View, overlayView];
+export const VIEW_DEFS: ViewDef[] = [l1View, l2View, l3View, bgpView, ospfAreaView];
 
 export const VIEW_REGISTRY = Object.fromEntries(
   VIEW_DEFS.map((v) => [v.id, v])

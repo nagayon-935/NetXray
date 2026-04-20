@@ -3,11 +3,8 @@ import { useTopologyStore } from "../../stores/topology-store";
 import { useViewStore } from "../../stores/view-store";
 import { VIEW_DEFS, type ViewId } from "../../lib/views";
 import { useLayerStore, LAYER_DEFS, type LayerId } from "../../stores/layer-store";
-import { useSnapshotStore } from "../../stores/snapshot-store";
-import { useWhatIfStore } from "../../stores/whatif-store";
 import { useIRLoad } from "../../hooks/useIRLoad";
 import type { LayoutPreset } from "../../hooks/useTopologyLayout";
-import { ShareButton } from "./ShareButton";
 
 interface SimToolbarProps {
   onLayoutChange: (preset: LayoutPreset) => void;
@@ -26,14 +23,6 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
 
   const layers = useLayerStore((s) => s.layers);
   const toggleLayer = useLayerStore((s) => s.toggleLayer);
-
-  const saveSnapshot = useSnapshotStore((s) => s.saveSnapshot);
-  const snapshotCount = useSnapshotStore((s) => s.snapshots.length);
-
-  const whatIfActive = useWhatIfStore((s) => s.isActive);
-  const whatIfFailureCount = useWhatIfStore((s) => s.failures.length);
-  const activateWhatIf = useWhatIfStore((s) => s.activate);
-  const deactivateWhatIf = useWhatIfStore((s) => s.deactivate);
 
   const { handleFile, handleApiLoad, fetchTopologyList } = useIRLoad();
   const [apiTopos, setApiTopos] = useState<{ name: string; node_count: number }[] | null>(null);
@@ -62,32 +51,13 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
     }
   }, [showApiMenu, fetchTopologyList]);
 
-  const handleSaveSnapshot = useCallback(() => {
-    if (!ir) return;
-    saveSnapshot(ir);
-    setActivePanel("snapshot");
-  }, [ir, saveSnapshot, setActivePanel]);
-
-  const handleWhatIfToggle = useCallback(() => {
-    if (whatIfActive) {
-      deactivateWhatIf();
-      setActivePanel(null);
-    } else {
-      if (!ir) return;
-      activateWhatIf(ir);
-      setActivePanel("whatif");
-    }
-  }, [whatIfActive, ir, activateWhatIf, deactivateWhatIf, setActivePanel]);
-
-  // Which views are available given the current IR
   const availableViews = VIEW_DEFS.filter((def) => {
-    if (!ir) return def.id === "physical";
+    if (!ir) return def.id === "l1";
     return def.isAvailable(ir);
   });
 
   return (
     <div className="flex items-center gap-2 p-2 bg-slate-50 border-b border-slate-200 text-xs flex-wrap">
-      {/* Engine status badge */}
       <span
         title={`Engine: ${engineStatus}`}
         className={`px-1.5 py-0.5 rounded font-mono text-[10px] flex-shrink-0 ${
@@ -101,7 +71,6 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
         {engineStatus === "wasm" ? "WASM" : engineStatus === "mock" ? "mock" : "..."}
       </span>
 
-      {/* Load section */}
       <div className="flex items-center gap-1">
         <span className="text-slate-500 font-medium">Load:</span>
         <button
@@ -154,12 +123,12 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
                   </button>
                 ))}
               </div>
-              
+
               <div className="border-t border-slate-100 mt-1 pt-1 p-2 space-y-2">
                 <div className="text-[10px] text-slate-400 uppercase font-bold mb-1">
                   Scan Running Lab
                 </div>
-                <input 
+                <input
                   type="text"
                   placeholder="/labs/your-lab.clab.yml"
                   className="w-full text-[10px] font-mono px-2 py-1 border rounded"
@@ -170,7 +139,7 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
                 <button
                   onClick={async (e) => {
                     e.stopPropagation();
-                    const input = document.getElementById('clab-path-input') as HTMLInputElement;
+                    const input = document.getElementById("clab-path-input") as HTMLInputElement;
                     const path = input.value;
                     if (!path) return;
                     try {
@@ -179,14 +148,14 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                           topology_name: "collected-lab",
-                          clab_topology: path
-                        })
+                          clab_topology: path,
+                        }),
                       });
                       if (!res.ok) throw new Error("Failed");
                       const ir = await res.json();
                       loadIR(ir);
                       setShowApiMenu(false);
-                    } catch (err) {
+                    } catch {
                       alert("Scan failed. Check if path is correct and lab is running.");
                     }
                   }}
@@ -202,7 +171,6 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
 
       <div className="w-px h-5 bg-slate-300" />
 
-      {/* View section */}
       <div className="flex items-center gap-1">
         <span className="text-slate-500 font-medium">View:</span>
         {availableViews.map((def) => (
@@ -228,7 +196,6 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
 
       <div className="w-px h-5 bg-slate-300" />
 
-      {/* Layers section — non-base overlays */}
       <div className="flex items-center gap-1">
         <span className="text-slate-500 font-medium">Layers:</span>
         {LAYER_DEFS.map((def) => (
@@ -254,8 +221,7 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
 
       <div className="w-px h-5 bg-slate-300" />
 
-      {/* Layout section — only for Physical view */}
-      {activeViewId === "physical" && (
+      {activeViewId === "l1" && (
         <>
           <div className="flex items-center gap-1">
             <span className="text-slate-500 font-medium">Layout:</span>
@@ -273,7 +239,6 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
         </>
       )}
 
-      {/* Panel section */}
       <div className="flex items-center gap-1">
         <span className="text-slate-500 font-medium">Panel:</span>
         <button
@@ -297,80 +262,6 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
           Packet Sim
         </button>
         <button
-          onClick={() => setActivePanel(activePanel === "snapshot" ? null : "snapshot")}
-          className={`px-2 py-1 border rounded relative ${
-            activePanel === "snapshot"
-              ? "bg-blue-50 border-blue-300 text-blue-700"
-              : "bg-white border-slate-200 hover:bg-slate-100"
-          }`}
-        >
-          Snapshots
-          {snapshotCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 flex items-center justify-center text-[9px] bg-blue-500 text-white rounded-full leading-none">
-              {snapshotCount}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => setActivePanel(activePanel === "timeline" ? null : "timeline")}
-          disabled={snapshotCount === 0}
-          title="Time-travel through snapshots"
-          className={`px-2 py-1 border rounded disabled:opacity-40 disabled:cursor-not-allowed ${
-            activePanel === "timeline"
-              ? "bg-blue-50 border-blue-300 text-blue-700"
-              : "bg-white border-slate-200 hover:bg-slate-100"
-          }`}
-        >
-          Timeline
-        </button>
-        <button
-          onClick={() => setActivePanel(activePanel === "config" ? null : "config")}
-          disabled={!ir}
-          className={`px-2 py-1 border rounded disabled:opacity-40 disabled:cursor-not-allowed ${
-            activePanel === "config"
-              ? "bg-blue-50 border-blue-300 text-blue-700"
-              : "bg-white border-slate-200 hover:bg-slate-100"
-          }`}
-        >
-          Config Gen
-        </button>
-        <button
-          onClick={() => setActivePanel(activePanel === "diagnosis" ? null : "diagnosis")}
-          disabled={!ir}
-          className={`px-2 py-1 border rounded disabled:opacity-40 disabled:cursor-not-allowed ${
-            activePanel === "diagnosis"
-              ? "bg-blue-50 border-blue-300 text-blue-700"
-              : "bg-white border-slate-200 hover:bg-slate-100"
-          }`}
-        >
-          Diagnosis
-        </button>
-
-        {/* What-If toggle */}
-        <button
-          onClick={handleWhatIfToggle}
-          disabled={!ir}
-          className={`px-2 py-1 border rounded relative disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${
-            whatIfActive
-              ? "bg-orange-500 border-orange-500 text-white"
-              : activePanel === "whatif" || activePanel === "convergence"
-              ? "bg-orange-50 border-orange-300 text-orange-700"
-              : "bg-white border-slate-200 hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700"
-          }`}
-          title={whatIfActive ? "Exit What-If mode" : "Enter What-If mode"}
-        >
-          What-If
-          {whatIfActive && whatIfFailureCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 flex items-center justify-center text-[9px] bg-red-500 text-white rounded-full leading-none">
-              {whatIfFailureCount}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* Lab control */}
-      <div className="flex items-center gap-1">
-        <button
           onClick={() => setActivePanel(activePanel === "lab" ? null : "lab")}
           className={`px-2 py-1 border rounded transition-colors ${
             activePanel === "lab"
@@ -381,43 +272,6 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
         >
           Lab
         </button>
-        <button
-          onClick={() => setActivePanel(activePanel === "capture" ? null : "capture")}
-          disabled={!ir}
-          className={`px-2 py-1 border rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-            activePanel === "capture"
-              ? "bg-violet-50 border-violet-400 text-violet-700"
-              : "bg-white border-slate-200 hover:bg-slate-100"
-          }`}
-          title="Packet capture via tcpdump"
-        >
-          Capture
-        </button>
-        <button
-          onClick={() => setActivePanel(activePanel === "yaml-editor" ? null : "yaml-editor")}
-          disabled={!ir}
-          className={`px-2 py-1 border rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-            activePanel === "yaml-editor"
-              ? "bg-teal-50 border-teal-400 text-teal-700"
-              : "bg-white border-slate-200 hover:bg-slate-100"
-          }`}
-          title="View and deploy containerlab YAML"
-        >
-          YAML
-        </button>
-      </div>
-
-      {/* Snapshot save shortcut */}
-      <div className="flex items-center gap-1">
-        <button
-          onClick={handleSaveSnapshot}
-          disabled={!ir}
-          title="Save snapshot of current topology state"
-          className="px-2 py-1 bg-white border border-slate-200 rounded hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs"
-        >
-          📸
-        </button>
-        <ShareButton />
       </div>
     </div>
   );

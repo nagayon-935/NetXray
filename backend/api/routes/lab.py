@@ -62,8 +62,6 @@ async def destroy(req: LifecycleRequest) -> dict:
         run_id = await start_lifecycle("destroy", req.topology_file, extra, _broadcast)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
-    # Stop event stream since the lab is going down
-    telemetry_manager.stop_event_stream("default")
     return {"run_id": run_id}
 
 
@@ -87,19 +85,3 @@ async def status() -> dict:
 @router.get("/logs/{run_id}")
 async def logs(run_id: str) -> dict:
     return {"logs": get_run_logs(run_id)}
-
-
-@router.post("/events/start")
-async def start_events(topology_name: str = "default", lab_name: str = "") -> dict:
-    """Manually start docker event streaming for a deployed lab."""
-    if not lab_name:
-        raise HTTPException(status_code=400, detail="lab_name is required")
-    await telemetry_manager.start_event_stream(topology_name, lab_name)
-    return {"ok": True}
-
-
-@router.post("/events/stop")
-async def stop_events(topology_name: str = "default") -> dict:
-    """Stop docker event streaming."""
-    telemetry_manager.stop_event_stream(topology_name)
-    return {"ok": True}

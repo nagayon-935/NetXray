@@ -7,6 +7,6 @@ interface ViewState {
 }
 
 export const useViewStore = create<ViewState>((set) => ({
-  activeView: "physical",
+  activeView: "l1",
   setActiveView: (view) => set({ activeView: view }),
 }));

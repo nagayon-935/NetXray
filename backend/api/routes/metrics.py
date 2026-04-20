@@ -1,10 +1,24 @@
-import logging
 from fastapi import APIRouter, Response
 from prometheus_client import Gauge, generate_latest, CONTENT_TYPE_LATEST
 from api.state import get_current_ir
-from diagnosis.rules import check_acl_best_practices
 from metrics import derive_metrics
-from constants import BGP_STATES
+
+
+def _count_acl_shadows(ir: dict) -> dict[str, int]:
+    """Count rules shadowed by an early 'permit any any' per ACL."""
+    counts: dict[str, int] = {}
+    acls = (ir.get("policies") or {}).get("acls") or {}
+    for acl_name, rules in acls.items():
+        if not rules:
+            continue
+        shadowed = 0
+        for i, rule in enumerate(rules[:-1]):
+            if rule.get("src") == "any" and rule.get("dst") == "any" and rule.get("action") == "permit":
+                shadowed = len(rules) - i - 1
+                break
+        if shadowed:
+            counts[acl_name] = shadowed
+    return counts
 
 router = APIRouter(tags=["metrics"])
 
@@ -53,16 +67,8 @@ async def metrics():
             traffic_in_bps.labels(node=node_id, interface=iface_name).set(in_bps)
             traffic_out_bps.labels(node=node_id, interface=iface_name).set(out_bps)
 
-        # ACL shadowed-rule count (derived from diagnosis rules)
-        acl_issues = check_acl_best_practices(ir)
-        acl_shadow_counts: dict[str, int] = {}
-        for issue in acl_issues:
-            try:
-                acl_name = issue.message.split("'")[1]
-            except IndexError:
-                acl_name = "unknown"
-            acl_shadow_counts[acl_name] = acl_shadow_counts.get(acl_name, 0) + 1
-        for acl_name, count in acl_shadow_counts.items():
+        # ACL shadowed-rule count
+        for acl_name, count in _count_acl_shadows(ir).items():
             acl_shadow_count.labels(acl=acl_name).set(count)
 
         # Reachability failures (placeholder)

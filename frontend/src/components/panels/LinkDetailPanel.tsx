@@ -8,7 +8,7 @@ export function LinkDetailPanel() {
   const ir = useTopologyStore((s) => s.ir);
   const selectedLinkId = useTopologyStore((s) => s.selectedLinkId);
   const toggleLinkState = useTopologyStore((s) => s.toggleLinkState);
-  const applyPatches = useTopologyStore((s) => s.applyPatches);
+  const updateInterface = useTopologyStore((s) => s.updateInterface);
   const closePanel = () => useTopologyStore.getState().setActivePanel(null);
 
   if (!ir || !selectedLinkId) return null;
@@ -62,7 +62,7 @@ export function LinkDetailPanel() {
             node={sourceNode}
             ifaceName={link.source.interface}
             iface={sourceIface}
-            applyPatches={applyPatches}
+            updateInterface={updateInterface}
             title="Source Interface"
           />
         )}
@@ -71,7 +71,7 @@ export function LinkDetailPanel() {
             node={targetNode}
             ifaceName={link.target.interface}
             iface={targetIface}
-            applyPatches={applyPatches}
+            updateInterface={updateInterface}
             title="Target Interface"
           />
         )}
@@ -285,47 +285,28 @@ function InterfaceEditor({
   node,
   ifaceName,
   iface,
-  applyPatches,
+  updateInterface,
   title,
 }: {
   node: Node;
   ifaceName: string;
   iface: Interface;
-  applyPatches: (patches: any[]) => void;
+  updateInterface: (
+    nodeId: string,
+    ifaceName: string,
+    patch: Partial<{ ip: string; mac: string }>
+  ) => void;
   title: string;
 }) {
   const [ip, setIp] = useState(iface.ip ?? "");
   const [mac, setMac] = useState(iface.mac ?? "");
 
-  useEffect(() => {
-    setIp(iface.ip ?? "");
-    setMac(iface.mac ?? "");
-  }, [iface.ip, iface.mac]);
-
   const handleSave = () => {
-    const ir = useTopologyStore.getState().ir;
-    if (!ir) return;
-    const nodeIndex = ir.topology.nodes.findIndex((n) => n.id === node.id);
-    if (nodeIndex === -1) return;
-
-    const patches = [];
-    if (ip !== (iface.ip ?? "")) {
-      patches.push({
-        op: "replace",
-        path: `/topology/nodes/${nodeIndex}/interfaces/${ifaceName}/ip`,
-        value: ip,
-      });
-    }
-    if (mac !== (iface.mac ?? "")) {
-      patches.push({
-        op: "replace",
-        path: `/topology/nodes/${nodeIndex}/interfaces/${ifaceName}/mac`,
-        value: mac,
-      });
-    }
-
-    if (patches.length > 0) {
-      applyPatches(patches);
+    const patch: Partial<{ ip: string; mac: string }> = {};
+    if (ip !== (iface.ip ?? "")) patch.ip = ip;
+    if (mac !== (iface.mac ?? "")) patch.mac = mac;
+    if (Object.keys(patch).length > 0) {
+      updateInterface(node.id, ifaceName, patch);
     }
   };
 

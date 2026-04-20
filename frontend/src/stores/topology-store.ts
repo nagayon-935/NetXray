@@ -3,11 +3,18 @@ import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import type { NetXrayIR, Node, Link } from "../types/netxray-ir";
 import type { PacketPath, ShadowedRule } from "../engine/types";
 import { getEngine } from "../engine/wasm-engine";
-import { useSnapshotStore } from "./snapshot-store";
-import { applyPatch } from "../lib/ir-patch";
 import { COLORS } from "../lib/colors";
 
 export type EngineStatus = "loading" | "wasm" | "mock";
+
+export type ActivePanel =
+  | "detail"
+  | "link-detail"
+  | "acl"
+  | "packet"
+  | "lab"
+  | "edit"
+  | null;
 
 export interface TopologyState {
   ir: NetXrayIR | null;
@@ -19,8 +26,9 @@ export interface TopologyState {
   selectedAclName: string | null;
   packetPath: PacketPath | null;
   shadowedRules: Record<string, ShadowedRule[]>;
-  activePanel: "detail" | "link-detail" | "acl" | "packet" | "snapshot" | "whatif" | "convergence" | "timeline" | "config" | "diagnosis" | "lab" | "capture" | "yaml-editor" | null;
+  activePanel: ActivePanel;
   engineStatus: EngineStatus;
+  editMode: boolean;
 
   loadIR: (ir: NetXrayIR) => void;
   selectNode: (nodeId: string | null) => void;
@@ -28,12 +36,31 @@ export interface TopologyState {
   selectAcl: (aclName: string | null) => void;
   setPacketPath: (path: PacketPath | null) => void;
   setShadowedRules: (aclName: string, rules: ShadowedRule[]) => void;
-  setActivePanel: (panel: "detail" | "link-detail" | "acl" | "packet" | "snapshot" | "whatif" | "convergence" | "timeline" | "config" | "diagnosis" | "lab" | "capture" | "yaml-editor" | null) => void;
+  setActivePanel: (panel: ActivePanel) => void;
   toggleLinkState: (linkId: string) => void;
   updateFlowElements: () => void;
   setEngineStatus: (status: "wasm" | "mock") => void;
-  applyPatches: (patches: any[]) => void;
   updateNodePositions: (nodes: FlowNode[]) => void;
+  updateInterface: (
+    nodeId: string,
+    ifaceName: string,
+    patch: Partial<{ ip: string; mac: string }>
+  ) => void;
+
+  // Edit mode
+  setEditMode: (on: boolean) => void;
+  addNode: (type: "router" | "switch" | "host", position: { x: number; y: number }) => string;
+  deleteNode: (nodeId: string) => void;
+  updateNode: (nodeId: string, patch: Partial<Node>) => void;
+  addLink: (
+    sourceNode: string,
+    sourceInterface: string,
+    targetNode: string,
+    targetInterface: string
+  ) => void;
+  deleteLink: (linkId: string) => void;
+  saveIR: (name: string) => Promise<void>;
+  applyToClab: (topoName: string) => Promise<string>;
 }
 
 function irNodeToFlowNode(node: Node): FlowNode {
@@ -71,6 +98,10 @@ function irLinkToFlowEdge(link: Link, packetPath: PacketPath | null): FlowEdge {
   };
 }
 
+function makeId(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
 export const useTopologyStore = create<TopologyState>((set, get) => ({
   ir: null,
   flowNodes: [],
@@ -83,6 +114,7 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
   shadowedRules: {},
   activePanel: null,
   engineStatus: "loading",
+  editMode: false,
 
   loadIR: (ir) => {
     getEngine().loadTopology(ir);
@@ -92,7 +124,12 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
   },
 
   selectNode: (nodeId) => {
-    set({ selectedNodeId: nodeId, selectedLinkId: null, activePanel: nodeId ? "detail" : null });
+    const { editMode } = get();
+    set({
+      selectedNodeId: nodeId,
+      selectedLinkId: null,
+      activePanel: nodeId ? (editMode ? "edit" : "detail") : null,
+    });
   },
 
   selectLink: (linkId) => {
@@ -120,9 +157,6 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
     const { ir } = get();
     if (!ir) return;
 
-    // Auto-snapshot before mutating so the timeline records each toggle
-    useSnapshotStore.getState().autoSnapshot(ir, `link toggled: ${linkId}`);
-
     const updatedLinks = ir.topology.links.map((link) =>
       link.id === linkId
         ? { ...link, state: link.state === "up" ? ("down" as const) : ("up" as const) }
@@ -144,30 +178,169 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
 
   setEngineStatus: (status) => set({ engineStatus: status }),
 
-  applyPatches: (patches) => {
+  updateInterface: (nodeId, ifaceName, patch) => {
     const { ir } = get();
     if (!ir) return;
-
-    let nextIR = { ...ir };
-    for (const p of patches) {
-      nextIR = applyPatch(nextIR, p);
-    }
-    getEngine().loadTopology(nextIR);
-    set({ ir: nextIR });
-    get().updateFlowElements();
+    const updatedNodes = ir.topology.nodes.map((n) => {
+      if (n.id !== nodeId) return n;
+      const iface = n.interfaces?.[ifaceName];
+      if (!iface) return n;
+      return {
+        ...n,
+        interfaces: {
+          ...n.interfaces,
+          [ifaceName]: { ...iface, ...patch },
+        },
+      };
+    });
+    const updatedIR = { ...ir, topology: { ...ir.topology, nodes: updatedNodes } };
+    getEngine().loadTopology(updatedIR);
+    set({ ir: updatedIR });
   },
 
   updateNodePositions: (nodes) => {
     const { nodePositions } = get();
     const next = { ...nodePositions };
     nodes.forEach((n) => {
-      next[n.id] = { 
-        x: n.position.x, 
+      next[n.id] = {
+        x: n.position.x,
         y: n.position.y,
         width: n.measured?.width || (n.style?.width as number) || 180,
-        height: n.measured?.height || (n.style?.height as number) || 60
+        height: n.measured?.height || (n.style?.height as number) || 60,
       };
     });
     set({ nodePositions: next });
+  },
+
+  // ── Edit mode ────────────────────────────────────────────────────────────────
+
+  setEditMode: (on) => {
+    set({ editMode: on });
+    if (!on) {
+      // Leaving edit mode: close edit panel
+      const { activePanel } = get();
+      if (activePanel === "edit") set({ activePanel: null });
+    }
+  },
+
+  addNode: (type, position) => {
+    const { ir } = get();
+    const id = makeId(type);
+    const newNode: Node = {
+      id,
+      type,
+      vendor: "generic",
+      interfaces: {
+        eth0: { state: "up" },
+      },
+    };
+
+    const updatedIR: NetXrayIR = ir
+      ? { ...ir, topology: { ...ir.topology, nodes: [...ir.topology.nodes, newNode] } }
+      : {
+          ir_version: "0.2",
+          topology: { nodes: [newNode], links: [] },
+        };
+
+    getEngine().loadTopology(updatedIR);
+    set({ ir: updatedIR, nodePositions: { ...get().nodePositions, [id]: { x: position.x, y: position.y } } });
+    return id;
+  },
+
+  deleteNode: (nodeId) => {
+    const { ir } = get();
+    if (!ir) return;
+    const updatedNodes = ir.topology.nodes.filter((n) => n.id !== nodeId);
+    const updatedLinks = ir.topology.links.filter(
+      (l) => l.source.node !== nodeId && l.target.node !== nodeId
+    );
+    const updatedIR = { ...ir, topology: { nodes: updatedNodes, links: updatedLinks } };
+    getEngine().loadTopology(updatedIR);
+    const { nodePositions } = get();
+    const nextPos = { ...nodePositions };
+    delete nextPos[nodeId];
+    set({ ir: updatedIR, nodePositions: nextPos, selectedNodeId: null, activePanel: null });
+  },
+
+  updateNode: (nodeId, patch) => {
+    const { ir } = get();
+    if (!ir) return;
+    const updatedNodes = ir.topology.nodes.map((n) =>
+      n.id === nodeId ? { ...n, ...patch } : n
+    );
+    const updatedIR = { ...ir, topology: { ...ir.topology, nodes: updatedNodes } };
+    getEngine().loadTopology(updatedIR);
+    set({ ir: updatedIR });
+  },
+
+  addLink: (sourceNode, sourceInterface, targetNode, targetInterface) => {
+    const { ir } = get();
+    if (!ir) return;
+    const id = makeId("link");
+    const newLink: Link = {
+      id,
+      source: { node: sourceNode, interface: sourceInterface },
+      target: { node: targetNode, interface: targetInterface },
+      state: "up",
+    };
+    const updatedIR = {
+      ...ir,
+      topology: { ...ir.topology, links: [...ir.topology.links, newLink] },
+    };
+    getEngine().loadTopology(updatedIR);
+    set({ ir: updatedIR });
+  },
+
+  deleteLink: (linkId) => {
+    const { ir } = get();
+    if (!ir) return;
+    const updatedLinks = ir.topology.links.filter((l) => l.id !== linkId);
+    const updatedIR = { ...ir, topology: { ...ir.topology, links: updatedLinks } };
+    getEngine().loadTopology(updatedIR);
+    set({ ir: updatedIR, selectedLinkId: null, activePanel: null });
+  },
+
+  saveIR: async (name) => {
+    const { ir } = get();
+    if (!ir) throw new Error("No topology loaded");
+    const res = await fetch(`/api/topology/${name}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(ir),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail ?? `HTTP ${res.status}`);
+    }
+  },
+
+  applyToClab: async (topoName) => {
+    const { ir } = get();
+    if (!ir) throw new Error("No topology loaded");
+
+    // Step 1: export IR → clab YAML
+    const exportRes = await fetch("/api/iac/export/clab", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ir }),
+    });
+    if (!exportRes.ok) {
+      const body = await exportRes.json().catch(() => ({}));
+      throw new Error(body.detail ?? "Export failed");
+    }
+    const { clab_yaml } = await exportRes.json();
+
+    // Step 2: deploy
+    const deployRes = await fetch("/api/iac/deploy-clab", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clab_yaml, topo_name: topoName }),
+    });
+    if (!deployRes.ok) {
+      const body = await deployRes.json().catch(() => ({}));
+      throw new Error(body.detail ?? "Deploy failed");
+    }
+    const { run_id } = await deployRes.json();
+    return run_id as string;
   },
 }));

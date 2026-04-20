@@ -8,13 +8,14 @@ import {
   useEdgesState,
   type NodeMouseHandler,
   type EdgeMouseHandler,
+  type OnConnect,
+  addEdge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { COLORS } from "../lib/colors";
 import { useTopologyStore } from "../stores/topology-store";
 import { useViewStore } from "../stores/view-store";
-import { useWhatIfStore } from "../stores/whatif-store";
 import { useTopologyLayout, type LayoutPreset } from "../hooks/useTopologyLayout";
 import { loadIRFromUrl } from "../lib/ir-loader";
 import { useIRLoad } from "../hooks/useIRLoad";
@@ -22,25 +23,18 @@ import { VIEW_REGISTRY, type ViewResult } from "../lib/views";
 import { nodeTypes } from "./nodes/registry";
 import { NetworkEdge } from "./edges/NetworkEdge";
 import { BgpEdge } from "./edges/BgpEdge";
-import { HeatmapEdge } from "./edges/HeatmapEdge";
 import { SimToolbar } from "./toolbar/SimToolbar";
-import { useTelemetryWS } from "../hooks/useTelemetryWS";
-import { useLayerStore } from "../stores/layer-store";
+import { EditToolbar } from "./toolbar/EditToolbar";
 import { NodeDetailPanel } from "./panels/NodeDetailPanel";
+import { NodeEditPanel } from "./panels/NodeEditPanel";
 import { AclTablePanel } from "./panels/AclTablePanel";
 import { PacketSimPanel } from "./panels/PacketSimPanel";
-import { SnapshotPanel } from "./panels/SnapshotPanel";
-import { WhatIfPanel } from "./panels/WhatIfPanel";
-import { ConvergencePanel } from "./panels/ConvergencePanel";
-import { TimelinePanel } from "./panels/TimelinePanel";
-import { ConfigGenPanel } from "./panels/ConfigGenPanel";
-import { DiagnosisPanel } from "./panels/DiagnosisPanel";
 import { LinkDetailPanel } from "./panels/LinkDetailPanel";
+import { LabControlPanel } from "./panels/LabControlPanel";
 
 const edgeTypes = {
   network: NetworkEdge,
   bgp: BgpEdge,
-  heatmap: HeatmapEdge,
 };
 
 export function TopologyCanvas() {
@@ -49,106 +43,24 @@ export function TopologyCanvas() {
   const selectNode = useTopologyStore((s) => s.selectNode);
   const selectLink = useTopologyStore((s) => s.selectLink);
   const activePanel = useTopologyStore((s) => s.activePanel);
-  const heatmapEnabled = useLayerStore((s) => s.layers.heatmap);
-  // Connect telemetry WebSocket only when an IR is loaded.
-  // "default" is a placeholder topology name — the backend mock loop
-  // broadcasts to all WS clients keyed by this name.
-  useTelemetryWS(ir ? "default" : undefined);
+  const editMode = useTopologyStore((s) => s.editMode);
+  const addNode = useTopologyStore((s) => s.addNode);
+  const addLink = useTopologyStore((s) => s.addLink);
+  const deleteNode = useTopologyStore((s) => s.deleteNode);
+  const deleteLink = useTopologyStore((s) => s.deleteLink);
+  const selectedNodeId = useTopologyStore((s) => s.selectedNodeId);
+  const selectedLinkId = useTopologyStore((s) => s.selectedLinkId);
 
   const activeViewId = useViewStore((s) => s.activeView);
   const activeView = VIEW_REGISTRY[activeViewId];
 
-  // Derived view state (nodes/edges from IR for the current view)
   const viewResult = useMemo<ViewResult>(() => {
     if (!ir) return { nodes: [], edges: [] };
     return activeView.derive(ir);
   }, [ir, activeView]);
 
-  // What-If state for ghost rendering
-  const whatIfActive = useWhatIfStore((s) => s.isActive);
-  const whatIfFailures = useWhatIfStore((s) => s.failures);
-  const whatIfAffected = useWhatIfStore((s) => s.affectedNodes);
-
-  // What-If: build sets of failed node / link IDs for styling
-  const failedNodeIds = useMemo(
-    () =>
-      new Set(
-        whatIfActive
-          ? whatIfFailures.filter((f) => f.kind === "node").map((f) => f.id)
-          : []
-      ),
-    [whatIfActive, whatIfFailures]
-  );
-  const failedLinkIds = useMemo(
-    () =>
-      new Set(
-        whatIfActive
-          ? whatIfFailures.filter((f) => f.kind === "link").map((f) => f.id)
-          : []
-      ),
-    [whatIfActive, whatIfFailures]
-  );
-
-  // Apply What-If ghost styling to edges
-  const styledEdges = useMemo(
-    () =>
-      viewResult.edges.map((e) => {
-        const edge = { ...e };
-        if (heatmapEnabled) {
-          edge.type = "heatmap";
-        }
-        if (!whatIfActive) return edge;
-        if (failedLinkIds.has(e.id)) {
-          return {
-            ...edge,
-            style: {
-              ...edge.style,
-              stroke: COLORS.DOWN,
-              strokeDasharray: "6,4",
-              strokeWidth: 2,
-              opacity: 0.5,
-            },
-            animated: false,
-          };
-        }
-        return edge;
-      }),
-    [viewResult.edges, whatIfActive, failedLinkIds, heatmapEnabled]
-  );
-
-  // Apply What-If ghost styling to nodes: failed=red ghost, affected=orange tint
-  const styledNodes = useMemo(
-    () =>
-      viewResult.nodes.map((n) => {
-        if (!whatIfActive) return n;
-        if (failedNodeIds.has(n.id)) {
-          return {
-            ...n,
-            style: {
-              ...n.style,
-              opacity: 0.35,
-              filter: "grayscale(60%) sepia(30%)",
-              outline: `2px dashed ${COLORS.DOWN}`,
-              outlineOffset: "2px",
-              borderRadius: "6px",
-            },
-          };
-        }
-        if (whatIfAffected.has(n.id)) {
-          return {
-            ...n,
-            style: {
-              ...n.style,
-              outline: "2px solid #f97316",
-              outlineOffset: "2px",
-              borderRadius: "6px",
-            },
-          };
-        }
-        return n;
-      }),
-    [viewResult.nodes, whatIfActive, failedNodeIds, whatIfAffected]
-  );
+  const styledNodes = viewResult.nodes;
+  const styledEdges = viewResult.edges;
 
   const [nodes, setNodes, onNodesChangeState] = useNodesState(styledNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(styledEdges);
@@ -160,34 +72,33 @@ export function TopologyCanvas() {
   const onNodesChange = onNodesChangeState;
 
   const onNodeDragStop: NodeMouseHandler = useCallback(
-    (_event, _draggedNode) => {
+    (...[, ]) => {
       const { nodePositions } = useTopologyStore.getState();
       const nextPositions = { ...nodePositions };
-      
+
       const getAbsPos = (nodeId: string): { x: number; y: number } => {
-        const n = nodes.find(curr => curr.id === nodeId);
+        const n = nodes.find((curr) => curr.id === nodeId);
         if (!n) return { x: 0, y: 0 };
         if (!n.parentId) return n.position;
         const parentPos = getAbsPos(n.parentId);
         return { x: parentPos.x + n.position.x, y: parentPos.y + n.position.y };
       };
 
-      nodes.forEach(n => {
+      nodes.forEach((n) => {
         const abs = getAbsPos(n.id);
         nextPositions[n.id] = {
           x: abs.x,
           y: abs.y,
           width: n.measured?.width || (n.style?.width as number) || 180,
-          height: n.measured?.height || (n.style?.height as number) || 60
+          height: n.measured?.height || (n.style?.height as number) || 60,
         };
       });
-      
+
       useTopologyStore.setState({ nodePositions: nextPositions });
     },
     [nodes]
   );
 
-  // Sync nodes and edges into ReactFlow state when derived view or What-If changes
   useEffect(() => {
     const { nodePositions, updateNodePositions } = useTopologyStore.getState();
 
@@ -228,7 +139,7 @@ export function TopologyCanvas() {
     });
 
     const finalNodes = [...mergedNodes];
-    
+
     finalNodes.forEach((n) => {
       if (n.type === "group" && !nodePositions[n.id]) {
         const children = finalNodes.filter((child) => child.parentId === n.id);
@@ -240,10 +151,10 @@ export function TopologyCanvas() {
           const maxY = Math.max(...childPos.map((p) => p!.y + (p!.height || 60)));
           const padding = 40;
           n.position = { x: minX - padding, y: minY - padding };
-          n.style = { 
-            ...n.style, 
-            width: (maxX - minX) + padding * 2, 
-            height: (maxY - minY) + padding * 2 
+          n.style = {
+            ...n.style,
+            width: maxX - minX + padding * 2,
+            height: maxY - minY + padding * 2,
           };
         }
       }
@@ -294,8 +205,8 @@ export function TopologyCanvas() {
 
   const onEdgeClick: EdgeMouseHandler = useCallback(
     (_event, edge) => {
-      if (edge.type === "network" || edge.type === "heatmap" || edge.type === "default") {
-        const linkId = edge.id.replace(/^(l\d+-)?phy-/, "");
+      if (edge.type === "network" || edge.type === "default") {
+        const linkId = edge.id.replace(/^(l\d+-)?phy-|^ospf-/, "");
         selectLink(linkId);
       }
     },
@@ -326,9 +237,51 @@ export function TopologyCanvas() {
     e.dataTransfer.dropEffect = "copy";
   }, []);
 
+  // Delete key handler for edit mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!editMode) return;
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+      if (selectedNodeId) deleteNode(selectedNodeId);
+      else if (selectedLinkId) deleteLink(selectedLinkId);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editMode, selectedNodeId, selectedLinkId, deleteNode, deleteLink]);
+
+  // Drag-to-connect: create a link in edit mode
+  const onConnect: OnConnect = useCallback(
+    (params) => {
+      if (!editMode) return;
+      const srcNode = ir?.topology.nodes.find((n) => n.id === params.source);
+      const tgtNode = ir?.topology.nodes.find((n) => n.id === params.target);
+      if (!srcNode || !tgtNode) return;
+      const srcIfaces = Object.keys(srcNode.interfaces ?? {});
+      const tgtIfaces = Object.keys(tgtNode.interfaces ?? {});
+      const srcIface = srcIfaces[0] ?? "eth0";
+      const tgtIface = tgtIfaces[0] ?? "eth0";
+      addLink(params.source!, srcIface, params.target!, tgtIface);
+      setEdges((eds) => addEdge(params, eds));
+    },
+    [editMode, ir, addLink, setEdges]
+  );
+
+  const handleAddNode = useCallback(
+    (type: "router" | "switch" | "host") => {
+      const viewportCenter = { x: 300, y: 200 };
+      const id = addNode(type, viewportCenter);
+      layoutApplied.current = true;
+      selectNode(id);
+    },
+    [addNode, selectNode]
+  );
+
   return (
     <div className="flex flex-col h-full">
       <SimToolbar onLayoutChange={handleLayoutChange} onLoadSample={handleLoadSample} />
+      <EditToolbar onAddNode={handleAddNode} />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 relative" onDrop={onDrop} onDragOver={onDragOver}>
           {!ir && (
@@ -338,9 +291,6 @@ export function TopologyCanvas() {
                 <div className="text-lg font-semibold">NetXray</div>
                 <div className="text-sm mt-1">
                   Load a sample topology or drag &amp; drop an IR JSON file
-                </div>
-                <div className="text-xs mt-2 text-slate-300">
-                  Supports IR v0.1 and v0.2 (BGP · SRv6 · EVPN)
                 </div>
               </div>
             </div>
@@ -354,12 +304,14 @@ export function TopologyCanvas() {
             onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
             onNodeDragStop={onNodeDragStop}
+            onConnect={onConnect}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             fitView
             minZoom={0.1}
             maxZoom={3}
             defaultEdgeOptions={{ type: "network" }}
+            connectOnClick={editMode}
           >
             <Background gap={20} size={1} color="#e2e8f0" />
             <Controls position="bottom-left" />
@@ -377,25 +329,12 @@ export function TopologyCanvas() {
           </ReactFlow>
         </div>
 
-        {/* Side panels — only one shown at a time */}
         {activePanel === "detail" && <NodeDetailPanel />}
+        {activePanel === "edit" && <NodeEditPanel />}
         {activePanel === "link-detail" && <LinkDetailPanel />}
         {activePanel === "acl" && <AclTablePanel />}
         {activePanel === "packet" && <PacketSimPanel />}
-        {activePanel === "snapshot" && <SnapshotPanel />}
-        {activePanel === "whatif" && <WhatIfPanel />}
-        {activePanel === "convergence" && <ConvergencePanel />}
-        {activePanel === "timeline" && <TimelinePanel />}
-        {activePanel === "config" && (
-          <div className="w-96 border-l bg-white shadow-xl flex flex-col">
-            <ConfigGenPanel selectedNodeId={useTopologyStore.getState().selectedNodeId} />
-          </div>
-        )}
-        {activePanel === "diagnosis" && (
-          <div className="w-96 border-l bg-white shadow-xl flex flex-col">
-            <DiagnosisPanel />
-          </div>
-        )}
+        {activePanel === "lab" && <LabControlPanel />}
       </div>
     </div>
   );

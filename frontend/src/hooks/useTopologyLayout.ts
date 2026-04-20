@@ -39,19 +39,29 @@ export function useTopologyLayout() {
     ): Promise<{ nodes: FlowNode[]; edges: FlowEdge[] }> => {
       if (nodes.length === 0) return { nodes, edges };
 
-      const elkNodeMap = new Map<string, any>();
-      const rootChildren: any[] = [];
+      interface ElkNode {
+        id: string;
+        width?: number;
+        height?: number;
+        x?: number;
+        y?: number;
+        layoutOptions?: Record<string, string>;
+        children: ElkNode[];
+      }
+
+      const elkNodeMap = new Map<string, ElkNode>();
+      const rootChildren: ElkNode[] = [];
 
       nodes.forEach((node) => {
         const isGroup = node.type === "group";
-        const elkNode = {
+        const elkNode: ElkNode = {
           id: node.id,
           width: isGroup ? undefined : NODE_WIDTH,
           height: isGroup ? undefined : NODE_HEIGHT,
           layoutOptions: isGroup
             ? { "elk.padding": "[top=40,left=20,bottom=20,right=20]" }
             : undefined,
-          children: [] as any[],
+          children: [],
         };
         elkNodeMap.set(node.id, elkNode);
       });
@@ -90,7 +100,7 @@ export function useTopologyLayout() {
 
       // Helper to find node positions recursively from layouted graph
       const positionMap = new Map<string, { x: number; y: number; width?: number; height?: number }>();
-      const extractPositions = (elkNodes: any[]) => {
+      const extractPositions = (elkNodes: ElkNode[]) => {
         for (const n of elkNodes) {
           positionMap.set(n.id, { x: n.x ?? 0, y: n.y ?? 0, width: n.width, height: n.height });
           if (n.children && n.children.length > 0) {

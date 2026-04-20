@@ -3,7 +3,6 @@ mod routing;
 mod topology;
 mod types;
 
-use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -36,12 +35,6 @@ struct JsPacketPath {
     hops: Vec<JsPathHop>,
     result: String,
     drop_reason: Option<String>,
-}
-
-#[derive(Serialize)]
-struct JsRoutingUpdate {
-    affected_nodes: Vec<String>,
-    updated_paths: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -205,24 +198,6 @@ pub fn simulate_packet(packet_json: &str) -> Result<JsValue, JsValue> {
     })
 }
 
-/// Simulate a link failure / recovery. Rebuilds the internal graph from the
-/// (already mutated) IR state.  The frontend mutates the IR and re-calls
-/// `load_topology`; this function just reports which nodes are affected.
-#[wasm_bindgen]
-pub fn simulate_link_failure(link_id: &str) -> Result<JsValue, JsValue> {
-    ENGINE.with(|e| {
-        let state_ref = e.borrow();
-        let state = state_ref.as_ref().ok_or_else(|| JsValue::from_str("No topology loaded"))?;
-
-        let link = state.ir.topology.links.iter().find(|l| l.id == link_id)
-            .ok_or_else(|| JsValue::from_str(&format!("Link {link_id} not found")))?;
-
-        let affected = vec![link.source.node.clone(), link.target.node.clone()];
-        let out = JsRoutingUpdate { affected_nodes: affected, updated_paths: HashMap::new() };
-        json_to_jsvalue(out)
-    })
-}
-
 /// Detect ACL shadowing for a named ACL.
 /// Returns a JSON array of `ShadowedRule` objects.
 #[wasm_bindgen]
@@ -238,6 +213,44 @@ pub fn detect_acl_shadows(acl_name: &str) -> Result<JsValue, JsValue> {
 
         let shadows = detect_shadows(acl_name, rules);
         json_to_jsvalue(shadows)
+    })
+}
+
+/// Standalone ACL evaluation against the loaded IR.
+/// `packet_json` should be `{ src_ip, dst_ip, protocol, src_port?, dst_port? }`.
+/// Returns `{ acl_name, matched_seq, action }`.
+#[wasm_bindgen]
+pub fn evaluate_acl_named(acl_name: &str, packet_json: &str) -> Result<JsValue, JsValue> {
+    let header: JsPacketHeader = serde_json::from_str(packet_json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid packet: {e}")))?;
+
+    ENGINE.with(|e| {
+        let state_ref = e.borrow();
+        let state = state_ref.as_ref().ok_or_else(|| JsValue::from_str("No topology loaded"))?;
+
+        let rules = state.ir.policies.as_ref()
+            .and_then(|p| p.acls.as_ref())
+            .and_then(|acls| acls.get(acl_name))
+            .ok_or_else(|| JsValue::from_str(&format!("ACL {acl_name} not found")))?;
+
+        let acl_packet = PacketHeader {
+            src_ip: header.src_ip,
+            dst_ip: header.dst_ip,
+            protocol: header.protocol,
+            src_port: header.src_port,
+            dst_port: header.dst_port,
+        };
+        let result = evaluate_acl(rules, &acl_packet);
+        let action_str = match result.action {
+            AclAction::Permit => "permit",
+            AclAction::Deny => "deny",
+            AclAction::NoMatch => "no-match",
+        };
+        json_to_jsvalue(JsAclResult {
+            acl_name: acl_name.to_string(),
+            matched_seq: result.matched_seq,
+            action: action_str.to_string(),
+        })
     })
 }
 

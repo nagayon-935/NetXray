@@ -1,9 +1,8 @@
 /**
- * physical-view.ts — Default physical topology view.
+ * l1-view.ts — Physical (L1) topology view.
  *
  * Converts IR nodes and links directly to ReactFlow elements with no grouping.
- * Positions are left at (0,0) — the ELK layout pass in TopologyCanvas
- * places them correctly (needsLayout: true).
+ * ELK auto-layout positions them.
  */
 
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
@@ -44,10 +43,10 @@ function derive(ir: NetXrayIR): ViewResult {
   };
 }
 
-export const physicalView: ViewDef = {
-  id: "physical",
-  label: "Physical",
-  description: "All nodes and physical links",
+export const l1View: ViewDef = {
+  id: "l1",
+  label: "L1 / Physical",
+  description: "All nodes and physical links (cabling)",
   color: "#94a3b8",
   needsLayout: true,
   isAvailable: () => true,
