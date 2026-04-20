@@ -33,14 +33,19 @@ def test_slash31_link():
     assert len(links) == 1
 
 
-def test_large_subnet_ignored():
-    """A /24 subnet with 2 nodes should not be treated as a P2P link."""
+def test_slash24_inferred_as_link():
+    """/24 subnets with exactly 2 nodes are inferred as links (fallback mode).
+
+    The primary link source is now the clab YAML endpoints. This fallback
+    allows /24 since it's better to show too many links than miss real ones
+    when no topology file is available.
+    """
     node_ifaces = {
         "r1": [InterfaceData(name="eth0", ip="192.168.1.1/24", state="up")],
         "r2": [InterfaceData(name="eth0", ip="192.168.1.2/24", state="up")],
     }
     links = build_links(node_ifaces)
-    assert len(links) == 0
+    assert len(links) == 1
 
 
 def test_no_duplicate_links():
