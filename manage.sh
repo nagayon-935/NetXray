@@ -3,7 +3,8 @@
 # --- Configuration ---
 IMAGE_NAME="netxray:latest"
 CONTAINER_NAME="netxray-server"
-HOST_LABS_DIR="/home/nagayoshi/frr" 
+# ユーザーのホームディレクトリをベースにする
+BASE_DIR="/home/nagayoshi"
 PORT=8000
 
 # --- Functions ---
@@ -18,11 +19,8 @@ up() {
     fi
 
     echo "Starting NetXray on http://localhost:$PORT ..."
-    # 重要なフラグ:
-    # --network host: ホストのブリッジインターフェースを参照可能にする
-    # --privileged: ネットワーク操作権限を付与
-    # --pid host: 他のコンテナのネットワーク名前空間にアクセスしてリンクを作成するために必要
-    # -v ...: ホストと全く同じパスでマウントし、containerlabのパス不一致を防ぐ
+    # frr と c9lab の両方を含めるため、共通の親ディレクトリをマウント
+    # 互換性のために環境変数も設定
     docker run -d \
         --name $CONTAINER_NAME \
         --network host \
@@ -30,8 +28,9 @@ up() {
         --pid host \
         -e PYTHONUNBUFFERED=1 \
         -v /var/run/docker.sock:/var/run/docker.sock \
-        -v $HOST_LABS_DIR:$HOST_LABS_DIR \
-        -e NETXRAY_CLAB_LABS_DIR=$HOST_LABS_DIR \
+        -v $BASE_DIR/frr:$BASE_DIR/frr \
+        -v $BASE_DIR/c9lab:$BASE_DIR/c9lab \
+        -e NETXRAY_CLAB_LABS_DIR=$BASE_DIR \
         $IMAGE_NAME
 
     echo "Done."
