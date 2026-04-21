@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -6,6 +6,8 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
+  useReactFlow,
+  ReactFlowProvider,
   type NodeMouseHandler,
   type EdgeMouseHandler,
   type OnConnect,
@@ -38,6 +40,14 @@ const edgeTypes = {
   network: NetworkEdge,
   bgp: BgpEdge,
 };
+
+function FitViewEffect({ trigger }: { trigger: number }) {
+  const { fitView } = useReactFlow();
+  useEffect(() => {
+    if (trigger > 0) fitView({ duration: 300, padding: 0.1 });
+  }, [trigger, fitView]);
+  return null;
+}
 
 export function TopologyCanvas() {
   const ir = useTopologyStore((s) => s.ir);
@@ -73,6 +83,7 @@ export function TopologyCanvas() {
   const layoutApplied = useRef(false);
   const prevViewId = useRef(activeViewId);
   const updateNodePositions = useTopologyStore((s) => s.updateNodePositions);
+  const [fitTrigger, setFitTrigger] = useState(0);
 
   const onNodesChange = onNodesChangeState;
 
@@ -109,6 +120,7 @@ export function TopologyCanvas() {
 
     if (prevViewId.current !== activeViewId) {
       prevViewId.current = activeViewId;
+      layoutApplied.current = false;
     }
 
     if (styledNodes.length === 0) {
@@ -125,11 +137,12 @@ export function TopologyCanvas() {
         layoutApplied.current = true;
         // fall through to merge-with-stored-positions branch below
       } else {
-        applyLayout(styledNodes, styledEdges, "spine-leaf").then(({ nodes: laid }) => {
+        applyLayout(styledNodes, styledEdges, activeView.preferredLayout ?? "spine-leaf").then(({ nodes: laid }) => {
           setNodes(laid);
           setEdges(styledEdges);
           layoutApplied.current = true;
           updateNodePositions(laid);
+          setFitTrigger((n) => n + 1);
         });
         return;
       }
@@ -195,6 +208,7 @@ export function TopologyCanvas() {
       applyLayout(styledNodes, styledEdges, preset).then(({ nodes: laid }) => {
         setNodes(laid);
         updateNodePositions(laid);
+        setFitTrigger((n) => n + 1);
       });
     },
     [styledNodes, styledEdges, applyLayout, setNodes, updateNodePositions]
@@ -308,6 +322,7 @@ export function TopologyCanvas() {
               </div>
             </div>
           )}
+          <ReactFlowProvider>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -326,6 +341,7 @@ export function TopologyCanvas() {
             defaultEdgeOptions={{ type: "network" }}
             connectOnClick={editMode}
           >
+            <FitViewEffect trigger={fitTrigger} />
             <Background gap={20} size={1} color="#e2e8f0" />
             <Controls position="bottom-left" />
             <MiniMap
@@ -340,6 +356,7 @@ export function TopologyCanvas() {
               }}
             />
           </ReactFlow>
+          </ReactFlowProvider>
         </div>
 
         {activePanel === "detail" && <NodeDetailPanel />}

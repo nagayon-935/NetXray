@@ -4,10 +4,12 @@ import { RouterNode } from "./RouterNode";
 import { SwitchNode } from "./SwitchNode";
 import { HostNode } from "./HostNode";
 import { GroupNode } from "./GroupNode";
+import { VniNode } from "./VniNode";
 
 export const nodeTypes: Record<string, ComponentType<NodeProps>> = {
   router: RouterNode,
   switch: SwitchNode,
   host: HostNode,
   group: GroupNode,
+  vni: VniNode,
 };

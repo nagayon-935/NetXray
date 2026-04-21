@@ -4,13 +4,12 @@ import type { PacketPath } from "../../engine/types";
 import { type ViewDef, type ViewResult, isLinkOnPath } from "./index";
 import { COLORS } from "../colors";
 
-// One color per VNI group (cycling)
 const DOMAIN_COLORS = [
-  { bg: "rgba(16,185,129,0.07)",  border: "rgba(16,185,129,0.45)" },  // emerald
-  { bg: "rgba(6,182,212,0.07)",   border: "rgba(6,182,212,0.45)"  },  // cyan
-  { bg: "rgba(139,92,246,0.07)",  border: "rgba(139,92,246,0.45)" },  // violet
-  { bg: "rgba(245,158,11,0.07)",  border: "rgba(245,158,11,0.45)" },  // amber
-  { bg: "rgba(236,72,153,0.07)",  border: "rgba(236,72,153,0.45)" },  // pink
+  { bg: "rgba(16,185,129,0.07)",  border: "rgba(16,185,129,0.7)"  },  // emerald
+  { bg: "rgba(6,182,212,0.07)",   border: "rgba(6,182,212,0.7)"   },  // cyan
+  { bg: "rgba(139,92,246,0.07)",  border: "rgba(139,92,246,0.7)"  },  // violet
+  { bg: "rgba(245,158,11,0.07)",  border: "rgba(245,158,11,0.7)"  },  // amber
+  { bg: "rgba(236,72,153,0.07)",  border: "rgba(236,72,153,0.7)"  },  // pink
 ];
 
 function domainColor(idx: number) {
@@ -23,153 +22,74 @@ function derive(ir: NetXrayIR, packetPath?: PacketPath | null): ViewResult {
 
   const nodeMap = new Map(ir.topology.nodes.map((n) => [n.id, n]));
 
-  // ── Step 1: collect VTEP → L2 VNI mappings ──────────────────────────────────
+  // ── Step 1: build VTEP → VNI mappings ───────────────────────────────────────
   const vtepVnis = new Map<string, Set<number>>();
-  const vniVlans = new Map<number, Set<number>>();
+  const vniMeta = new Map<number, { vlans: number[]; colorIdx: number }>();
+  let colorIdx = 0;
 
   for (const node of ir.topology.nodes) {
     const l2Vnis = node.evpn?.vnis?.filter((v) => v.type === "L2") ?? [];
     if (l2Vnis.length === 0) continue;
     vtepVnis.set(node.id, new Set(l2Vnis.map((v) => v.vni)));
     for (const v of l2Vnis) {
-      if (v.vlan != null) {
-        if (!vniVlans.has(v.vni)) vniVlans.set(v.vni, new Set());
-        vniVlans.get(v.vni)!.add(v.vlan);
+      if (!vniMeta.has(v.vni)) {
+        vniMeta.set(v.vni, { vlans: [], colorIdx: colorIdx++ });
       }
+      if (v.vlan != null) vniMeta.get(v.vni)!.vlans.push(v.vlan);
     }
   }
 
-  // ── Step 2: physical adjacency (for host→VTEP mapping) ──────────────────────
-  const adjacency = new Map<string, Set<string>>();
-  for (const node of ir.topology.nodes) adjacency.set(node.id, new Set());
-  for (const link of ir.topology.links) {
-    adjacency.get(link.source.node)?.add(link.target.node);
-    adjacency.get(link.target.node)?.add(link.source.node);
-  }
-
-  // ── Step 3: build L2 domains per VNI — VTEPs only ───────────────────────────
-  // Hosts are NOT placed inside VNI groups because a VTEP can participate in
-  // multiple VNIs and ReactFlow nodes can have only one parentId.
-  // Host↔VTEP membership is conveyed by the physical access links instead.
-  const domainMembers = new Map<number, Set<string>>();
-
-  for (const [vtepId, vnis] of vtepVnis) {
-    for (const vni of vnis) {
-      if (!domainMembers.has(vni)) domainMembers.set(vni, new Set());
-      domainMembers.get(vni)!.add(vtepId);
-    }
-  }
-
-  // ── Step 4: classify nodes ───────────────────────────────────────────────────
-  // VTEPs belong to VNI group boxes. Everything else (spines, hosts) is
-  // top-level: spines are the IP underlay, hosts connect via access links.
-  const vtepIds = new Set(vtepVnis.keys());
-  const underlayNodes = ir.topology.nodes
-    .filter((n) => !vtepIds.has(n.id))
-    .map((n) => n.id);
-
-  // ── Step 5: build ReactFlow nodes ────────────────────────────────────────────
-  // ReactFlow nodes can have only one parentId, so each VTEP is assigned to
-  // the lowest-numbered VNI group it belongs to. Empty groups are skipped.
-  // VXLAN tunnel edges (step 6) carry the full per-VNI information instead.
-  const assignedVteps = new Set<string>();
-  let colorIdx = 0;
-
-  for (const [vni, members] of [...domainMembers.entries()].sort(([a], [b]) => a - b)) {
-    const unassigned = [...members].filter((id) => !assignedVteps.has(id));
-    if (unassigned.length === 0) continue;
-
-    const groupId = `group-vni-${vni}`;
-    const vlans = vniVlans.get(vni);
-    let label = `VNI ${vni}`;
-    if (vlans && vlans.size > 0) label += ` · VLAN ${[...vlans].sort().join(",")}`;
-
-    const color = domainColor(colorIdx++);
+  // ── Step 2: VNI broadcast-domain nodes ──────────────────────────────────────
+  for (const [vni, meta] of [...vniMeta.entries()].sort(([a], [b]) => a - b)) {
+    const color = domainColor(meta.colorIdx);
+    const vlans = [...new Set(meta.vlans)].sort((a, b) => a - b);
     nodes.push({
-      id: groupId,
-      type: "group",
+      id: `vni-${vni}`,
+      type: "vni",
       position: { x: 0, y: 0 },
-      data: { label },
-      style: {
-        backgroundColor: color.bg,
-        border: `1.5px solid ${color.border}`,
-        borderRadius: 10,
-      },
+      data: { vni, vlans, color },
     });
-
-    for (const nodeId of unassigned) {
-      const node = nodeMap.get(nodeId)!;
-      assignedVteps.add(nodeId);
-      nodes.push({
-        id: node.id,
-        type: node.type === "host" ? "host" : node.type === "switch" ? "switch" : "router",
-        parentId: groupId,
-        extent: "parent",
-        position: { x: 0, y: 0 },
-        data: { ...node },
-        style: { zIndex: 1 },
-      });
-    }
   }
 
-  // 5b. Underlay / transit nodes (spines, etc.) — free-floating, no group
-  for (const nodeId of underlayNodes) {
-    const node = nodeMap.get(nodeId);
-    if (!node) continue;
+  // ── Step 3: device nodes (all free-floating, no parentId) ───────────────────
+  const vtepIds = new Set(vtepVnis.keys());
+  for (const node of ir.topology.nodes) {
     nodes.push({
       id: node.id,
       type: node.type === "host" ? "host" : node.type === "switch" ? "switch" : "router",
       position: { x: 0, y: 0 },
       data: { ...node },
-      // Slight dimming to hint "these are underlay/transit"
-      style: { opacity: 0.85 },
+      style: vtepIds.has(node.id) ? undefined : { opacity: 0.85 },
     });
   }
 
-  // ── Step 6: VTEP-to-VTEP VXLAN tunnel edges (overlay) ───────────────────────
-  // Draw one tunnel edge per shared VNI between VTEPs. If multiple VNIs share
-  // the same VTEP pair, they stack as separate edges.
-  const seenTunnels = new Set<string>();
-  for (const [vni, members] of domainMembers) {
-    const vtepList = [...members].filter((id) => vtepVnis.has(id));
-    for (let i = 0; i < vtepList.length; i++) {
-      for (let j = i + 1; j < vtepList.length; j++) {
-        const pairKey = [vtepList[i], vtepList[j]].sort().join("~~");
-        const edgeKey = `${vni}~~${pairKey}`;
-        if (seenTunnels.has(edgeKey)) continue;
-        seenTunnels.add(edgeKey);
-
-        edges.push({
-          id: `l2-vxlan-${edgeKey}`,
-          source: vtepList[i],
-          target: vtepList[j],
-          type: "default",
-          animated: true,
-          label: `VNI ${vni}`,
-          style: {
-            stroke: "#06b6d4",
-            strokeWidth: 2.5,
-            strokeDasharray: "7,3",
-          },
-          labelStyle: { fontSize: 10, fill: "#0e7490", fontWeight: 600 },
-          labelBgStyle: { fill: "rgba(255,255,255,0.9)", borderRadius: 3 },
-          labelBgPadding: [4, 2] as [number, number],
-        });
-      }
+  // ── Step 4: VTEP → VNI membership edges (one per participation) ─────────────
+  for (const [vtepId, vnis] of vtepVnis) {
+    for (const vni of vnis) {
+      const color = domainColor(vniMeta.get(vni)!.colorIdx);
+      edges.push({
+        id: `l2-member-${vtepId}-vni${vni}`,
+        source: vtepId,
+        target: `vni-${vni}`,
+        type: "default",
+        animated: false,
+        style: {
+          stroke: color.border,
+          strokeWidth: 2,
+          strokeDasharray: "6,3",
+          opacity: 0.85,
+        },
+      });
     }
   }
 
-  // ── Step 7: physical links (underlay fabric + access links) ─────────────────
-  // All physical links are shown so the user can see the real cable topology.
-  //   • Underlay fabric links (spine↔leaf, spine↔spine): thin gray, low opacity
-  //   • Access links (leaf↔host): normal weight, slightly more visible
+  // ── Step 5: physical links (underlay fabric + access links) ─────────────────
   for (const link of ir.topology.links) {
     const srcNode = nodeMap.get(link.source.node);
     const dstNode = nodeMap.get(link.target.node);
     if (!srcNode || !dstNode) continue;
 
-    const isAccessLink =
-      srcNode.type === "host" || dstNode.type === "host";
+    const isAccessLink = srcNode.type === "host" || dstNode.type === "host";
     const isOnPath = isLinkOnPath(link, packetPath);
     const isDown = link.state === "down";
 
@@ -191,7 +111,7 @@ function derive(ir: NetXrayIR, packetPath?: PacketPath | null): ViewResult {
           ? { stroke: COLORS.PATH, strokeWidth: 3 }
           : isAccessLink
             ? { stroke: COLORS.NEUTRAL, strokeWidth: 1.5, opacity: 0.75 }
-            : { stroke: "#94a3b8", strokeWidth: 1, opacity: 0.35 }, // underlay fabric — very dim
+            : { stroke: "#94a3b8", strokeWidth: 1, opacity: 0.35 },
     });
   }
 
@@ -202,12 +122,13 @@ export const l2View: ViewDef = {
   id: "l2",
   label: "L2 / VXLAN",
   description:
-    "Overlay view — VNI group boxes show L2 broadcast domains stretched between VTEPs. " +
-    "Animated dashed cyan lines = VXLAN tunnels (one per shared VNI). " +
-    "Dim gray lines = physical underlay fabric (spine↔leaf cables). " +
-    "Spine/transit nodes float freely above the overlay groups.",
+    "Overlay view — VNI nodes represent L2 broadcast domains (VXLAN segments). " +
+    "Dashed colored lines = VTEP membership (each leaf connects to its VNIs). " +
+    "Dim gray lines = physical underlay fabric. " +
+    "A VTEP can belong to multiple VNIs without layout conflicts.",
   color: "#06b6d4",
   needsLayout: true,
+  preferredLayout: "force",
   isAvailable: (ir) =>
     ir.topology.nodes.some((n) => n.evpn?.vnis?.some((v) => v.type === "L2")),
   derive,

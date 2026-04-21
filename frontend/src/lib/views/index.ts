@@ -31,6 +31,7 @@ export interface ViewDef {
   description: string;
   color: string;
   needsLayout: boolean;
+  preferredLayout?: "spine-leaf" | "layered" | "force";
   isAvailable: (ir: NetXrayIR) => boolean;
   derive: (ir: NetXrayIR, packetPath?: PacketPath | null) => ViewResult;
 }
