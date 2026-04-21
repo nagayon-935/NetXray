@@ -44,8 +44,14 @@ function derive(ir: NetXrayIR): ViewResult {
     }
   }
 
+  const ungrouped = new Set<string>(noBgp);
+
   let gIdx = 0;
   for (const [as, members] of asBuckets) {
+    if (members.length < 2) {
+      members.forEach((id) => ungrouped.add(id));
+      continue;
+    }
     const groupId = `as-${as}`;
     const color = asColor(gIdx++);
     nodes.push({
@@ -73,31 +79,38 @@ function derive(ir: NetXrayIR): ViewResult {
     }
   }
 
-  if (noBgp.length > 0) {
-    const groupId = "no-bgp";
+  // Top-level nodes: no-BGP members + single-member-AS promotions
+  for (const id of ungrouped) {
+    const node = nodeMap.get(id);
+    if (!node) continue;
     nodes.push({
-      id: groupId,
-      type: "group",
+      id,
+      type: node.type === "host" ? "host" : node.type === "switch" ? "switch" : "router",
       position: { x: 0, y: 0 },
-      data: { label: "No BGP" },
-      style: {
-        backgroundColor: "rgba(148,163,184,0.05)",
-        border: "1.5px dashed #cbd5e1",
-        borderRadius: 10,
-      },
+      data: { ...node },
+      style: node.bgp ? undefined : { opacity: 0.7 },
     });
-    for (const id of noBgp) {
-      const node = nodeMap.get(id)!;
-      nodes.push({
-        id,
-        type: node.type === "host" ? "host" : node.type === "switch" ? "switch" : "router",
-        parentId: groupId,
-        extent: "parent",
-        position: { x: 0, y: 0 },
-        data: { ...node },
-        style: { zIndex: 1, opacity: 0.5 },
-      });
-    }
+  }
+
+  // Physical links (shown dim, under BGP session edges)
+  for (const link of ir.topology.links) {
+    edges.push({
+      id: `bgp-phy-${link.id}`,
+      source: link.source.node,
+      target: link.target.node,
+      type: "network",
+      animated: false,
+      data: {
+        state: link.state,
+        sourceInterface: link.source.interface,
+        targetInterface: link.target.interface,
+        isOnPath: false,
+      },
+      style:
+        link.state === "down"
+          ? { stroke: COLORS.DOWN, strokeDasharray: "5,5", opacity: 0.4 }
+          : { stroke: COLORS.NEUTRAL, strokeWidth: 1, opacity: 0.4 },
+    });
   }
 
   // BGP sessions (both iBGP and eBGP)

@@ -8,12 +8,15 @@ Two entry points:
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Any, Dict
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 # vendor → (clab kind, default image). Image can be overridden via env vars.
 VENDOR_CLAB: dict[str, dict[str, str]] = {
@@ -99,7 +102,7 @@ def export_to_clab(ir: dict, output_dir: Path) -> Path:
         clab_node = _node_base(node)
 
         raw_config: str | None = node.get("raw_config")
-        binds = _write_node_configs(configs_dir, node_id, vendor, raw_config)
+        binds = _write_node_configs(configs_dir, node_id, vendor, raw_config, node)
         if binds:
             clab_node["binds"] = binds
 
@@ -124,8 +127,32 @@ def _write_node_configs(
     node_id: str,
     vendor: str,
     raw_config: str | None,
+    node: dict[str, Any] | None = None,
 ) -> list[str]:
-    if not raw_config:
+    """Write per-node config files and return bind-mount strings.
+
+    Priority:
+    1. ``raw_config`` (from live collection or user-edited textarea)
+    2. ``generate_startup_config(node)`` via vendor plugin (FRR / Arista)
+    3. Nothing — generic nodes without config data get no binds
+    """
+    effective_config = raw_config
+
+    if not effective_config and node and vendor in ("frr", "arista"):
+        try:
+            from plugins import get_plugin
+            plugin = get_plugin(vendor)
+            if plugin is not None:
+                gen = plugin.config_generator_class()
+                effective_config = gen.generate_startup_config(node)
+                logger.info(
+                    "Node %s: raw_config absent — generated %d-byte config via %s plugin",
+                    node_id, len(effective_config), vendor,
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("generate_startup_config failed for %s: %s", node_id, exc)
+
+    if not effective_config:
         return []
 
     node_dir = configs_dir / node_id
@@ -133,16 +160,16 @@ def _write_node_configs(
     binds: list[str] = []
 
     if vendor == "frr":
-        (node_dir / "frr.conf").write_text(raw_config, encoding="utf-8")
-        (node_dir / "daemons").write_text(_build_frr_daemons(raw_config), encoding="utf-8")
+        (node_dir / "frr.conf").write_text(effective_config, encoding="utf-8")
+        (node_dir / "daemons").write_text(_build_frr_daemons(effective_config), encoding="utf-8")
         binds.append(f"configs/{node_id}/frr.conf:/etc/frr/frr.conf")
         binds.append(f"configs/{node_id}/daemons:/etc/frr/daemons")
     elif vendor == "arista":
-        (node_dir / "startup-config").write_text(raw_config, encoding="utf-8")
+        (node_dir / "startup-config").write_text(effective_config, encoding="utf-8")
         binds.append(f"configs/{node_id}/startup-config:/mnt/flash/startup-config")
     else:
         # generic / unknown — just stash for reference, don't bind.
-        (node_dir / "config.txt").write_text(raw_config, encoding="utf-8")
+        (node_dir / "config.txt").write_text(effective_config, encoding="utf-8")
 
     return binds
 

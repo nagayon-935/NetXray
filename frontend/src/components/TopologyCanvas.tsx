@@ -113,13 +113,21 @@ export function TopologyCanvas() {
     }
 
     if (!layoutApplied.current) {
-      applyLayout(styledNodes, styledEdges, "spine-leaf").then(({ nodes: laid }) => {
-        setNodes(laid);
-        setEdges(styledEdges);
+      const hasSavedPositions =
+        Object.keys(nodePositions).length > 0 &&
+        styledNodes.every((n) => nodePositions[n.id]);
+      if (hasSavedPositions) {
         layoutApplied.current = true;
-        updateNodePositions(laid);
-      });
-      return;
+        // fall through to merge-with-stored-positions branch below
+      } else {
+        applyLayout(styledNodes, styledEdges, "spine-leaf").then(({ nodes: laid }) => {
+          setNodes(laid);
+          setEdges(styledEdges);
+          layoutApplied.current = true;
+          updateNodePositions(laid);
+        });
+        return;
+      }
     }
 
     const mergedNodes = styledNodes.map((sn) => {

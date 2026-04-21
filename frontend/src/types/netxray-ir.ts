@@ -5,6 +5,12 @@ export interface NetXrayIR {
   ir_version: string;
   topology: Topology;
   policies?: Policies;
+  meta?: IrMeta;
+}
+
+export interface IrMeta {
+  positions?: Record<string, { x: number; y: number }>;
+  [key: string]: unknown;
 }
 
 export interface Topology {

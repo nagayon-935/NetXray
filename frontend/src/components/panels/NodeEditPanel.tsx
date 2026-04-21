@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useTopologyStore } from "../../stores/topology-store";
 import { PanelFrame } from "./shared/PanelFrame";
 import type { Node } from "../../types/netxray-ir";
@@ -22,6 +22,7 @@ export function NodeEditPanel() {
       <NodeBasicEditor key={`basic-${node.id}`} node={node} updateNode={updateNode} />
       <InterfacesEditor key={`ifaces-${node.id}`} node={node} updateNode={updateNode} />
       <BgpEditor key={`bgp-${node.id}`} node={node} updateNode={updateNode} />
+      <RawConfigEditor key={`cfg-${node.id}`} node={node} updateNode={updateNode} />
       <div className="p-3 border-t border-slate-100">
         <button
           onClick={() => deleteNode(node.id)}
@@ -161,6 +162,98 @@ function InterfacesEditor({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Raw Config ────────────────────────────────────────────────────────────────
+
+function RawConfigEditor({
+  node,
+  updateNode,
+}: {
+  node: Node;
+  updateNode: (id: string, patch: Partial<Node>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [config, setConfig] = useState(node.raw_config ?? "");
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
+
+  const canGenerate = node.vendor === "frr" || node.vendor === "arista";
+
+  const save = () => {
+    updateNode(node.id, { raw_config: config || undefined });
+  };
+
+  const generate = async () => {
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/iac/config/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ node, vendor: node.vendor ?? "generic" }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.detail ?? res.statusText);
+      }
+      const { config: generated } = await res.json();
+      setConfig(generated);
+      updateNode(node.id, { raw_config: generated });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div className="border-b border-slate-100">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+      >
+        <span>Raw Config</span>
+        <span className="text-slate-400">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="px-3 pb-3 space-y-2">
+          {error && (
+            <div className="text-[10px] text-red-500 bg-red-50 border border-red-200 rounded px-2 py-1">
+              {error}
+            </div>
+          )}
+          <textarea
+            ref={textRef}
+            value={config}
+            onChange={(e) => setConfig(e.target.value)}
+            onBlur={save}
+            rows={10}
+            className="w-full text-[10px] font-mono px-2 py-1.5 border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y"
+            placeholder="Paste or generate startup config…"
+          />
+          <div className="flex gap-1.5">
+            {canGenerate && (
+              <button
+                onClick={generate}
+                disabled={generating}
+                className="flex-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-600 text-[10px] font-medium rounded border border-blue-200 transition-colors disabled:opacity-50"
+              >
+                {generating ? "Generating…" : "⚡ Generate Config"}
+              </button>
+            )}
+            <button
+              onClick={save}
+              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-medium rounded border border-slate-200 transition-colors"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

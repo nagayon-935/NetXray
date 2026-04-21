@@ -93,7 +93,12 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
         </button>
         <label className="px-2 py-1 bg-white border border-slate-200 rounded hover:bg-slate-100 cursor-pointer">
           File...
-          <input type="file" accept=".json" className="hidden" onChange={handleFileUpload} />
+          <input
+            type="file"
+            accept=".json,.yml,.yaml,application/json,application/x-yaml,text/yaml"
+            className="hidden"
+            onChange={handleFileUpload}
+          />
         </label>
         <div className="relative">
           <button
@@ -104,7 +109,7 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
                 : "bg-white border-slate-200 hover:bg-slate-100"
             }`}
           >
-            API...
+            Load...
           </button>
           {showApiMenu && (
             <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-slate-200 rounded shadow-lg min-w-[240px] p-1">

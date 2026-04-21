@@ -14,6 +14,11 @@ class CloneToClabRequest(BaseModel):
     topo_name: str = "netxray-clone"
 
 
+class ClabYamlImportRequest(BaseModel):
+    yaml_text: str
+    filename: str | None = None
+
+
 class TopologyMeta(BaseModel):
     name: str
     node_count: int

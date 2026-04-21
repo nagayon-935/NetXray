@@ -17,6 +17,24 @@
     },
     "policies": {
       "$ref": "#/$defs/Policies"
+    },
+    "meta": {
+      "type": "object",
+      "description": "UI/client metadata (non-authoritative): positions, view state, etc.",
+      "additionalProperties": true,
+      "properties": {
+        "positions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["x", "y"],
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" }
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {

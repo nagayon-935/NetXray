@@ -61,6 +61,10 @@ export interface TopologyState {
   deleteLink: (linkId: string) => void;
   saveIR: (name: string) => Promise<void>;
   applyToClab: (topoName: string) => Promise<string>;
+
+  // New topology / export
+  newTopology: () => void;
+  exportIR: () => string;
 }
 
 function irNodeToFlowNode(node: Node): FlowNode {
@@ -120,7 +124,12 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
     getEngine().loadTopology(ir);
     const flowNodes = ir.topology.nodes.map(irNodeToFlowNode);
     const flowEdges = ir.topology.links.map((l) => irLinkToFlowEdge(l, null));
-    set({ ir, flowNodes, flowEdges, nodePositions: {}, packetPath: null, shadowedRules: {} });
+    const savedPositions = ir.meta?.positions ?? {};
+    const nodePositions: TopologyState["nodePositions"] = {};
+    for (const [id, pos] of Object.entries(savedPositions)) {
+      nodePositions[id] = { x: pos.x, y: pos.y };
+    }
+    set({ ir, flowNodes, flowEdges, nodePositions, packetPath: null, shadowedRules: {} });
   },
 
   selectNode: (nodeId) => {
@@ -238,7 +247,7 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
     const updatedIR: NetXrayIR = ir
       ? { ...ir, topology: { ...ir.topology, nodes: [...ir.topology.nodes, newNode] } }
       : {
-          ir_version: "0.2",
+          ir_version: "0.2.0",
           topology: { nodes: [newNode], links: [] },
         };
 
@@ -301,17 +310,60 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
   },
 
   saveIR: async (name) => {
-    const { ir } = get();
+    const { ir, nodePositions } = get();
     if (!ir) throw new Error("No topology loaded");
+    const positions: Record<string, { x: number; y: number }> = {};
+    for (const [id, p] of Object.entries(nodePositions)) {
+      positions[id] = { x: p.x, y: p.y };
+    }
+    const irWithMeta = {
+      ...ir,
+      meta: { ...(ir.meta ?? {}), positions },
+    };
     const res = await fetch(`/api/topology/${name}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(ir),
+      body: JSON.stringify(irWithMeta),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.detail ?? `HTTP ${res.status}`);
     }
+  },
+
+  newTopology: () => {
+    const emptyIR: NetXrayIR = {
+      ir_version: "0.2.0",
+      topology: { nodes: [], links: [] },
+      meta: { positions: {} },
+    };
+    getEngine().loadTopology(emptyIR);
+    set({
+      ir: emptyIR,
+      flowNodes: [],
+      flowEdges: [],
+      nodePositions: {},
+      packetPath: null,
+      shadowedRules: {},
+      selectedNodeId: null,
+      selectedLinkId: null,
+      activePanel: null,
+      editMode: true,
+    });
+  },
+
+  exportIR: () => {
+    const { ir, nodePositions } = get();
+    if (!ir) throw new Error("No topology loaded");
+    const positions: Record<string, { x: number; y: number }> = {};
+    for (const [id, p] of Object.entries(nodePositions)) {
+      positions[id] = { x: p.x, y: p.y };
+    }
+    const irWithMeta = {
+      ...ir,
+      meta: { ...(ir.meta ?? {}), positions },
+    };
+    return JSON.stringify(irWithMeta, null, 2);
   },
 
   applyToClab: async (topoName) => {

@@ -39,23 +39,25 @@ function derive(ir: NetXrayIR): ViewResult {
       const key = `ospf-${area}`;
       if (!l3Buckets.has(key)) l3Buckets.set(key, []);
       l3Buckets.get(key)!.push(node.id);
-    } else {
-      if (!l3Buckets.has("unmanaged")) l3Buckets.set("unmanaged", []);
-      l3Buckets.get("unmanaged")!.push(node.id);
     }
+    // Unmanaged nodes are intentionally NOT bucketed — they stay top-level.
   }
 
-  // ── Step 2: create group + child nodes ──────────────────────────────────────
+  // ── Step 2: create group + child nodes (groups require >= 2 members) ───────
+  const ungrouped = new Set<string>();
   const groupEntries = [...l3Buckets.entries()];
 
   groupEntries.forEach(([key, members], gIdx) => {
+    if (members.length < 2) {
+      members.forEach((id) => ungrouped.add(id));
+      return;
+    }
     const groupId = `group-${key}`;
     const color = groupColor(gIdx);
-    let label = "Unmanaged";
+    let label = key;
     if (key.startsWith("as-")) label = `AS ${key.replace("as-", "")}`;
     else if (key.startsWith("ospf-")) label = `OSPF Area ${key.replace("ospf-", "")}`;
 
-    // Parent group node
     nodes.push({
       id: groupId,
       type: "group",
@@ -68,10 +70,8 @@ function derive(ir: NetXrayIR): ViewResult {
       },
     });
 
-    // Child nodes
     members.forEach((nodeId) => {
       const node = nodeIdMap.get(nodeId)!;
-
       nodes.push({
         id: node.id,
         type: node.type === "host" ? "host" : node.type === "switch" ? "switch" : "router",
@@ -83,6 +83,19 @@ function derive(ir: NetXrayIR): ViewResult {
       });
     });
   });
+
+  // Top-level nodes: unmanaged (never bucketed) + single-member-bucket promotions
+  for (const node of ir.topology.nodes) {
+    const inBucket = [...l3Buckets.values()].some((arr) => arr.includes(node.id));
+    if (!inBucket || ungrouped.has(node.id)) {
+      nodes.push({
+        id: node.id,
+        type: node.type === "host" ? "host" : node.type === "switch" ? "switch" : "router",
+        position: { x: 0, y: 0 },
+        data: { ...node },
+      });
+    }
+  }
 
   // ── Step 3: eBGP edges (cross-AS BGP sessions) ───────────────────────────────
   const seenBgpEdges = new Set<string>();

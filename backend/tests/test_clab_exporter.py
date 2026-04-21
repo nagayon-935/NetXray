@@ -106,12 +106,42 @@ def test_frr_daemons_only_enables_configured_protocols(tmp_path):
     assert "ospfd=no" in daemons_text
 
 
-def test_export_skips_binds_when_no_raw_config(tmp_path):
+def test_export_generates_config_when_no_raw_config(tmp_path):
+    """When raw_config is absent, generate_startup_config is used for frr/arista."""
     ir = _ir("", "")
     yaml_path = export_to_clab(ir, tmp_path)
     doc = yaml.safe_load(yaml_path.read_text())
-    assert "binds" not in doc["topology"]["nodes"]["r1"]
-    assert "binds" not in doc["topology"]["nodes"]["r2"]
+    # FRR node: generated frr.conf and daemons binds
+    assert "binds" in doc["topology"]["nodes"]["r1"]
+    assert any("frr.conf" in b for b in doc["topology"]["nodes"]["r1"]["binds"])
+    assert (tmp_path / "configs" / "r1" / "frr.conf").exists()
+    # Arista node: generated startup-config bind
+    assert "binds" in doc["topology"]["nodes"]["r2"]
+    assert any("startup-config" in b for b in doc["topology"]["nodes"]["r2"]["binds"])
+    assert (tmp_path / "configs" / "r2" / "startup-config").exists()
+
+
+def test_export_skips_binds_for_generic_no_config(tmp_path):
+    """Generic nodes without raw_config get no binds (no config to generate)."""
+    ir = {
+        "ir_version": "0.2.0",
+        "metadata": {"name": "g"},
+        "topology": {
+            "nodes": [
+                {
+                    "id": "h1",
+                    "type": "host",
+                    "vendor": "generic",
+                    "hostname": "h1",
+                    "interfaces": {},
+                }
+            ],
+            "links": [],
+        },
+    }
+    yaml_path = export_to_clab(ir, tmp_path)
+    doc = yaml.safe_load(yaml_path.read_text())
+    assert "binds" not in doc["topology"]["nodes"]["h1"]
 
 
 def test_validate_ir_for_clone_empty():

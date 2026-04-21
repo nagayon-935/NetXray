@@ -7,10 +7,37 @@ export function useIRLoad(onLoad?: () => void) {
 
   const handleFile = useCallback(
     async (file: File) => {
-      if (!file.name.endsWith(".json")) return;
+      const lower = file.name.toLowerCase();
+      const isYaml =
+        lower.endsWith(".clab.yml") ||
+        lower.endsWith(".clab.yaml") ||
+        lower.endsWith(".yml") ||
+        lower.endsWith(".yaml");
+      const isJson = lower.endsWith(".json");
+
+      if (!isJson && !isYaml) {
+        alert("Unsupported file type. Use .json or .clab.yml / .yaml.");
+        return;
+      }
+
       try {
-        const ir = await loadIRFromFile(file);
-        loadIR(ir);
+        if (isJson) {
+          const ir = await loadIRFromFile(file);
+          loadIR(ir);
+        } else {
+          const text = await file.text();
+          const res = await fetch("/api/iac/from-clab-yaml", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ yaml_text: text, filename: file.name }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.detail ?? `HTTP ${res.status}`);
+          }
+          const ir = await res.json();
+          loadIR(ir);
+        }
         onLoad?.();
       } catch (err) {
         alert(`Failed to load IR: ${err instanceof Error ? err.message : err}`);

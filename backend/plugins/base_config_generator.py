@@ -45,6 +45,33 @@ class BaseConfigGenerator:
         # Subclasses should override this or call super if needed
         return []
 
+    def generate_startup_config(self, node: dict[str, Any]) -> str:
+        """Generate a complete startup configuration from an IR node dict.
+
+        Produces a generic IOS-like config.  Vendor subclasses should override
+        to emit the correct syntax (FRR vtysh, Arista EOS, …).
+        """
+        lines: list[str] = []
+        hostname = node.get("hostname") or node.get("id") or "router"
+        lines += [f"hostname {hostname}", "!"]
+
+        for iface_name, iface in (node.get("interfaces") or {}).items():
+            lines.append(f"interface {iface_name}")
+            if iface.get("ip"):
+                lines.append(f" ip address {iface['ip']}")
+            if iface.get("state") == "down":
+                lines.append(" shutdown")
+            else:
+                lines.append(" no shutdown")
+            lines.append("!")
+
+        bgp = node.get("bgp")
+        if bgp:
+            lines.extend(self.generate_bgp_config(bgp))
+            lines.append("!")
+
+        return "\n".join(lines) + "\n"
+
     def _generate_full_diff_template(self, base_node: dict[str, Any], target_node: dict[str, Any], start_cmds: list[str], end_cmds: list[str]) -> list[str]:
         commands = list(start_cmds)
 

@@ -96,7 +96,7 @@ function derive(ir: NetXrayIR): ViewResult {
     });
   });
 
-  if (underlayNodes.length > 0) {
+  if (underlayNodes.length >= 2) {
     allGroups.push({
       key: "underlay",
       label: "Underlay / IP",
@@ -106,7 +106,15 @@ function derive(ir: NetXrayIR): ViewResult {
     });
   }
 
+  const ungroupedMembers = new Set<string>(
+    underlayNodes.length < 2 ? underlayNodes : []
+  );
+
   for (const g of allGroups) {
+    if (g.members.length < 2) {
+      g.members.forEach((id) => ungroupedMembers.add(id));
+      continue;
+    }
     const groupId = `group-${g.key}`;
     const color = g.isUnderlay ? UNDERLAY_COLOR : domainColor(g.colorIdx);
 
@@ -136,6 +144,17 @@ function derive(ir: NetXrayIR): ViewResult {
       });
     });
   }
+
+  ungroupedMembers.forEach((nodeId) => {
+    const node = nodeMap.get(nodeId);
+    if (!node) return;
+    nodes.push({
+      id: node.id,
+      type: node.type === "host" ? "host" : node.type === "switch" ? "switch" : "router",
+      position: { x: 0, y: 0 },
+      data: { ...node },
+    });
+  });
 
   // ── Step 6: VTEP-to-VTEP EVPN fabric edges (shared L2 VNI) ──────────────────
   const seenEvpnEdges = new Set<string>();

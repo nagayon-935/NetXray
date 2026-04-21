@@ -11,6 +11,8 @@ export function EditToolbar({ onAddNode }: EditToolbarProps) {
   const ir = useTopologyStore((s) => s.ir);
   const saveIR = useTopologyStore((s) => s.saveIR);
   const applyToClab = useTopologyStore((s) => s.applyToClab);
+  const newTopology = useTopologyStore((s) => s.newTopology);
+  const exportIR = useTopologyStore((s) => s.exportIR);
 
   const [saveName, setSaveName] = useState("my-topology");
   const [saving, setSaving] = useState(false);
@@ -29,6 +31,26 @@ export function EditToolbar({ onAddNode }: EditToolbarProps) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleNew = () => {
+    if (ir && ir.topology.nodes.length > 0) {
+      if (!confirm("Discard current topology and start a new one?")) return;
+    }
+    newTopology();
+  };
+
+  const handleExport = () => {
+    const json = exportIR();
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${saveName || "topology"}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const handleApply = async () => {
@@ -63,6 +85,24 @@ export function EditToolbar({ onAddNode }: EditToolbarProps) {
       >
         {editMode ? "✎ Editing" : "✎ Edit"}
       </button>
+
+      <button
+        onClick={handleNew}
+        className="px-2 py-1 rounded font-medium border bg-white border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
+        title="Start a new empty topology"
+      >
+        ✨ New
+      </button>
+
+      {ir && (
+        <button
+          onClick={handleExport}
+          className="px-2 py-1 rounded font-medium border bg-white border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
+          title="Download current topology as JSON"
+        >
+          ⬇ Export
+        </button>
+      )}
 
       {editMode && (
         <>
