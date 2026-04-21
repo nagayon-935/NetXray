@@ -1,5 +1,6 @@
 """Lab lifecycle API — deploy / destroy / redeploy containerlab topologies."""
 
+import os
 import re
 
 from fastapi import APIRouter, HTTPException
