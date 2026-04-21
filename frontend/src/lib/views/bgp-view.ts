@@ -152,7 +152,7 @@ function derive(ir: NetXrayIR, _packetPath?: PacketPath | null): ViewResult {
 
 export const bgpView: ViewDef = {
   id: "bgp",
-  label: "BGP Sessions",
+  label: "BGP",
   description:
     "BGP session view — each router gets its own AS box (even single-router ASes). " +
     "Shows both iBGP (dashed blue, within same AS) and eBGP (solid green) sessions. " +
