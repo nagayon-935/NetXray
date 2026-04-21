@@ -293,23 +293,19 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
 
       <div className="w-px h-5 bg-slate-300" />
 
-      {activeViewId === "l1" && (
-        <>
-          <div className="flex items-center gap-1">
-            <span className="text-slate-500 font-medium">Layout:</span>
-            {(["spine-leaf", "layered", "force"] as LayoutPreset[]).map((preset) => (
-              <button
-                key={preset}
-                onClick={() => onLayoutChange(preset)}
-                className="px-2 py-1 bg-white border border-slate-200 rounded hover:bg-slate-100"
-              >
-                {preset}
-              </button>
-            ))}
-          </div>
-          <div className="w-px h-5 bg-slate-300" />
-        </>
-      )}
+      <div className="flex items-center gap-1">
+        <span className="text-slate-500 font-medium">Layout:</span>
+        {(["spine-leaf", "layered", "force"] as LayoutPreset[]).map((preset) => (
+          <button
+            key={preset}
+            onClick={() => onLayoutChange(preset)}
+            className="px-2 py-1 bg-white border border-slate-200 rounded hover:bg-slate-100 text-xs"
+          >
+            {preset}
+          </button>
+        ))}
+      </div>
+      <div className="w-px h-5 bg-slate-300" />
 
       <div className="flex items-center gap-1">
         <span className="text-slate-500 font-medium">Panel:</span>

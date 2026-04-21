@@ -167,7 +167,10 @@ function derive(ir: NetXrayIR, packetPath?: PacketPath | null): ViewResult {
 export const l3View: ViewDef = {
   id: "l3",
   label: "L3",
-  description: "L3 topology (BGP AS / OSPF Areas)",
+  description:
+    "Routing domain view — groups nodes by BGP AS or OSPF Area. " +
+    "Shows eBGP cross-domain edges and full-opacity physical links. " +
+    "Best for understanding which routing domain each node belongs to.",
   color: "#f59e0b",
   needsLayout: true,
   isAvailable: (ir) => ir.topology.nodes.some((n) => n.bgp || n.ospf),

@@ -45,14 +45,10 @@ function derive(ir: NetXrayIR, _packetPath?: PacketPath | null): ViewResult {
     }
   }
 
-  const ungrouped = new Set<string>(noBgp);
-
+  // BGP view: always render an AS group box, even for single-router ASes.
+  // (The whole point of this view is showing which AS each node belongs to.)
   let gIdx = 0;
   for (const [as, members] of asBuckets) {
-    if (members.length < 2) {
-      members.forEach((id) => ungrouped.add(id));
-      continue;
-    }
     const groupId = `as-${as}`;
     const color = asColor(gIdx++);
     nodes.push({
@@ -80,8 +76,8 @@ function derive(ir: NetXrayIR, _packetPath?: PacketPath | null): ViewResult {
     }
   }
 
-  // Top-level nodes: no-BGP members + single-member-AS promotions
-  for (const id of ungrouped) {
+  // Top-level nodes: nodes without any BGP AS (hosts, unmanaged devices)
+  for (const id of noBgp) {
     const node = nodeMap.get(id);
     if (!node) continue;
     nodes.push({
@@ -89,7 +85,7 @@ function derive(ir: NetXrayIR, _packetPath?: PacketPath | null): ViewResult {
       type: node.type === "host" ? "host" : node.type === "switch" ? "switch" : "router",
       position: { x: 0, y: 0 },
       data: { ...node },
-      style: node.bgp ? undefined : { opacity: 0.7 },
+      style: { opacity: 0.7 },
     });
   }
 
@@ -156,8 +152,12 @@ function derive(ir: NetXrayIR, _packetPath?: PacketPath | null): ViewResult {
 
 export const bgpView: ViewDef = {
   id: "bgp",
-  label: "BGP",
-  description: "BGP AS topology with iBGP/eBGP sessions",
+  label: "BGP Sessions",
+  description:
+    "BGP session view — each router gets its own AS box (even single-router ASes). " +
+    "Shows both iBGP (dashed blue, within same AS) and eBGP (solid green) sessions. " +
+    "Physical links are shown dimmed. " +
+    "Best for checking peering state and iBGP mesh / route-reflector topology.",
   color: "#f59e0b",
   needsLayout: true,
   isAvailable: (ir) => ir.topology.nodes.some((n) => n.bgp?.local_as),
