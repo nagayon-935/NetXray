@@ -1,6 +1,7 @@
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import type { NetXrayIR } from "../../types/netxray-ir";
-import type { ViewDef, ViewResult } from "./index";
+import type { PacketPath } from "../../engine/types";
+import { type ViewDef, type ViewResult, isLinkOnPath } from "./index";
 import { COLORS } from "../colors";
 
 const GROUP_COLORS = [
@@ -15,7 +16,7 @@ function groupColor(idx: number) {
   return GROUP_COLORS[idx % GROUP_COLORS.length];
 }
 
-function derive(ir: NetXrayIR): ViewResult {
+function derive(ir: NetXrayIR, packetPath?: PacketPath | null): ViewResult {
   const nodes: FlowNode[] = [];
   const edges: FlowEdge[] = [];
 
@@ -137,21 +138,25 @@ function derive(ir: NetXrayIR): ViewResult {
 
   // ── Step 4: physical links ─────────────────────────────────────────
   for (const link of ir.topology.links) {
+    const isOnPath = isLinkOnPath(link, packetPath);
+
     edges.push({
       id: `l3-phy-${link.id}`,
       source: link.source.node,
       target: link.target.node,
       type: "network",
-      animated: false,
+      animated: isOnPath,
       data: {
         state: link.state,
         sourceInterface: link.source.interface,
         targetInterface: link.target.interface,
-        isOnPath: false,
+        isOnPath,
       },
       style:
         link.state === "down"
           ? { stroke: COLORS.DOWN, strokeDasharray: "5,5" }
+          : isOnPath
+          ? { stroke: COLORS.PATH, strokeWidth: 3 }
           : { stroke: COLORS.NEUTRAL, strokeWidth: 1.5 },
     });
   }

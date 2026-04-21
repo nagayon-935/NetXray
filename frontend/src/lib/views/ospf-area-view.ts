@@ -1,13 +1,7 @@
-/**
- * ospf-area-view.ts — OSPF Area-grouped topology view.
- *
- * Groups nodes by OSPF area. Routers participating in multiple areas
- * (Area Border Routers / ABRs) are highlighted and placed in their primary area.
- */
-
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import type { NetXrayIR } from "../../types/netxray-ir";
-import type { ViewDef, ViewResult } from "./index";
+import type { PacketPath } from "../../engine/types";
+import { type ViewDef, type ViewResult, isLinkOnPath } from "./index";
 import { COLORS } from "../colors";
 
 const AREA_COLORS = [
@@ -28,7 +22,7 @@ function primaryArea(areas: string[]): string {
   return backbone ?? areas[0];
 }
 
-function derive(ir: NetXrayIR): ViewResult {
+function derive(ir: NetXrayIR, packetPath?: PacketPath | null): ViewResult {
   const nodes: FlowNode[] = [];
   const edges: FlowEdge[] = [];
 
@@ -122,32 +116,41 @@ function derive(ir: NetXrayIR): ViewResult {
 
   // Render physical links; classify intra-area vs inter-area for styling
   for (const link of ir.topology.links) {
+    const isOnPath = isLinkOnPath(link, packetPath);
     const srcAreas = nodeAreas.get(link.source.node);
     const dstAreas = nodeAreas.get(link.target.node);
     let stroke: string | undefined;
     let dash: string | undefined;
+    let strokeWidth = 1.5;
+
     if (srcAreas && dstAreas) {
       const shared = [...srcAreas].some((a) => dstAreas.has(a));
       stroke = shared ? COLORS.UP : "#f59e0b";
       dash = shared ? undefined : "6,3";
     }
+
     if (link.state === "down") {
       stroke = COLORS.DOWN;
       dash = "5,5";
+    } else if (isOnPath) {
+      stroke = COLORS.PATH;
+      strokeWidth = 3;
+      dash = undefined;
     }
+
     edges.push({
       id: `ospf-${link.id}`,
       source: link.source.node,
       target: link.target.node,
       type: "network",
-      animated: false,
+      animated: isOnPath,
       data: {
         state: link.state,
         sourceInterface: link.source.interface,
         targetInterface: link.target.interface,
-        isOnPath: false,
+        isOnPath,
       },
-      style: stroke ? { stroke, strokeWidth: 1.5, strokeDasharray: dash } : undefined,
+      style: stroke ? { stroke, strokeWidth, strokeDasharray: dash } : undefined,
     });
   }
 

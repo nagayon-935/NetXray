@@ -32,6 +32,8 @@ import { PacketSimPanel } from "./panels/PacketSimPanel";
 import { LinkDetailPanel } from "./panels/LinkDetailPanel";
 import { LabControlPanel } from "./panels/LabControlPanel";
 
+import { useLayerStore } from "../stores/layer-store";
+
 const edgeTypes = {
   network: NetworkEdge,
   bgp: BgpEdge,
@@ -39,6 +41,7 @@ const edgeTypes = {
 
 export function TopologyCanvas() {
   const ir = useTopologyStore((s) => s.ir);
+  const packetPath = useTopologyStore((s) => s.packetPath);
   const loadIR = useTopologyStore((s) => s.loadIR);
   const selectNode = useTopologyStore((s) => s.selectNode);
   const selectLink = useTopologyStore((s) => s.selectLink);
@@ -53,11 +56,13 @@ export function TopologyCanvas() {
 
   const activeViewId = useViewStore((s) => s.activeView);
   const activeView = VIEW_REGISTRY[activeViewId];
+  const { layers } = useLayerStore();
 
   const viewResult = useMemo<ViewResult>(() => {
     if (!ir) return { nodes: [], edges: [] };
-    return activeView.derive(ir);
-  }, [ir, activeView]);
+    const activePath = layers.path ? packetPath : null;
+    return activeView.derive(ir, activePath);
+  }, [ir, activeView, packetPath, layers.path]);
 
   const styledNodes = viewResult.nodes;
   const styledEdges = viewResult.edges;

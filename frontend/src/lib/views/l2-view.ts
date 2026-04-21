@@ -1,6 +1,7 @@
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import type { NetXrayIR } from "../../types/netxray-ir";
-import type { ViewDef, ViewResult } from "./index";
+import type { PacketPath } from "../../engine/types";
+import { type ViewDef, type ViewResult, isLinkOnPath } from "./index";
 import { COLORS } from "../colors";
 
 const DOMAIN_COLORS = [
@@ -18,7 +19,7 @@ function domainColor(idx: number) {
 
 // ── Derivation ────────────────────────────────────────────────────────────────
 
-function derive(ir: NetXrayIR): ViewResult {
+function derive(ir: NetXrayIR, packetPath?: PacketPath | null): ViewResult {
   const nodes: FlowNode[] = [];
   const edges: FlowEdge[] = [];
 
@@ -192,21 +193,25 @@ function derive(ir: NetXrayIR): ViewResult {
     // Only include links where at least one end is a host (access links)
     if (srcNode.type !== "host" && dstNode.type !== "host") continue;
 
+    const isOnPath = isLinkOnPath(link, packetPath);
+
     edges.push({
       id: `l2-phy-${link.id}`,
       source: link.source.node,
       target: link.target.node,
       type: "network",
-      animated: false,
+      animated: isOnPath,
       data: {
         state: link.state,
         sourceInterface: link.source.interface,
         targetInterface: link.target.interface,
-        isOnPath: false,
+        isOnPath,
       },
       style:
         link.state === "down"
           ? { stroke: COLORS.DOWN, strokeDasharray: "5,5" }
+          : isOnPath
+          ? { stroke: COLORS.PATH, strokeWidth: 3 }
           : { stroke: COLORS.NEUTRAL },
     });
   }

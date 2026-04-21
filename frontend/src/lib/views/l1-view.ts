@@ -7,7 +7,8 @@
 
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import type { NetXrayIR } from "../../types/netxray-ir";
-import type { ViewDef, ViewResult } from "./index";
+import type { PacketPath } from "../../engine/types";
+import { type ViewDef, type ViewResult, isLinkOnPath } from "./index";
 import { COLORS } from "../colors";
 
 function irNodeToFlowNode(node: NetXrayIR["topology"]["nodes"][number]): FlowNode {
@@ -19,27 +20,37 @@ function irNodeToFlowNode(node: NetXrayIR["topology"]["nodes"][number]): FlowNod
   };
 }
 
-function irLinkToFlowEdge(link: NetXrayIR["topology"]["links"][number]): FlowEdge {
+function irLinkToFlowEdge(
+  link: NetXrayIR["topology"]["links"][number],
+  packetPath?: PacketPath | null
+): FlowEdge {
+  const isOnPath = isLinkOnPath(link, packetPath);
+
   return {
     id: link.id,
     source: link.source.node,
     target: link.target.node,
     type: "network",
-    animated: false,
+    animated: isOnPath,
     data: {
       state: link.state,
       sourceInterface: link.source.interface,
       targetInterface: link.target.interface,
-      isOnPath: false,
+      isOnPath,
     },
-    style: link.state === "down" ? { stroke: COLORS.DOWN, strokeDasharray: "5,5" } : undefined,
+    style:
+      link.state === "down"
+        ? { stroke: COLORS.DOWN, strokeDasharray: "5,5" }
+        : isOnPath
+        ? { stroke: COLORS.PATH, strokeWidth: 3 }
+        : undefined,
   };
 }
 
-function derive(ir: NetXrayIR): ViewResult {
+function derive(ir: NetXrayIR, packetPath?: PacketPath | null): ViewResult {
   return {
     nodes: ir.topology.nodes.map(irNodeToFlowNode),
-    edges: ir.topology.links.map(irLinkToFlowEdge),
+    edges: ir.topology.links.map((l) => irLinkToFlowEdge(l, packetPath)),
   };
 }
 
