@@ -28,7 +28,6 @@ up() {
         --pid host \
         -e PYTHONUNBUFFERED=1 \
         -v /var/run/docker.sock:/var/run/docker.sock \
-        -v $BASE_DIR/frr:$BASE_DIR/frr \
         -v $BASE_DIR/c9lab:$BASE_DIR/c9lab \
         -e NETXRAY_CLAB_LABS_DIR=$BASE_DIR \
         $IMAGE_NAME

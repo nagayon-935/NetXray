@@ -4,6 +4,7 @@ import type {
   PacketHeader,
   PacketPath,
   PathHop,
+  PacketLayer,
   ShadowedRule,
   AclEvaluation,
 } from "./types";
@@ -11,6 +12,24 @@ import type {
 interface Graph {
   adjacency: Map<string, { neighbor: string; link: Link; cost: number }[]>;
   nodes: Map<string, Node>;
+}
+
+// Deterministic locally-administered MAC for interfaces lacking a collected one.
+function synthMac(nodeId: string, iface: string): string {
+  let h = 0;
+  const s = `${nodeId}/${iface}`;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  }
+  const b = [
+    (h >>> 24) & 0xff,
+    (h >>> 16) & 0xff,
+    (h >>> 8) & 0xff,
+    h & 0xff,
+    (h >>> 5) & 0xff,
+  ].map((n) => n.toString(16).padStart(2, "0"));
+  // 02: => locally administered, unicast
+  return `02:${b[0]}:${b[1]}:${b[2]}:${b[3]}:${b[4]}`;
 }
 
 function buildGraph(ir: NetXrayIR): Graph {
@@ -114,6 +133,26 @@ function buildShadowReason(earlier: AclRule, later: AclRule): string {
   return `Seq ${later.seq} (${later.action}) is unreachable due to seq ${earlier.seq} (${earlier.action})`;
 }
 
+// Overlay applied on the underlay segments between two encap endpoints on the path.
+type Overlay =
+  | {
+      type: "vxlan";
+      startIdx: number;
+      endIdx: number;
+      outerSrc: string;
+      outerDst: string;
+      vni: number;
+    }
+  | {
+      type: "srv6";
+      startIdx: number;
+      endIdx: number;
+      waypoints: number[]; // path indices of SRv6 nodes
+      sids: string[]; // SID per waypoint (parallel to `waypoints`)
+      srcSid: string; // headend locator (outer IPv6 source)
+    }
+  | null;
+
 class MockEngine implements SimEngine {
   private currentIR: NetXrayIR | null = null;
   private graph: Graph | null = null;
@@ -124,6 +163,24 @@ class MockEngine implements SimEngine {
   }
 
   simulatePacket(packet: PacketHeader): PacketPath {
+    // Echo Request travels src→dst. Intermediate routers only forward it.
+    const forward = this.tracePath(packet, "echo-request");
+
+    // Request/reply is an ICMP-echo concept only: the *destination host*
+    // returns an Echo Reply (dst→src), and only if the request was delivered.
+    // TCP/UDP single-packet sims have no such guaranteed reply.
+    if (packet.protocol === "icmp" && forward.result === "delivered") {
+      const replyPacket: PacketHeader = {
+        src_ip: packet.dst_ip,
+        dst_ip: packet.src_ip,
+        protocol: "icmp",
+      };
+      forward.reply = this.tracePath(replyPacket, "echo-reply");
+    }
+    return forward;
+  }
+
+  private tracePath(packet: PacketHeader, icmpMessage: "echo-request" | "echo-reply"): PacketPath {
     if (!this.currentIR || !this.graph) {
       return { hops: [], result: "unreachable", drop_reason: "No topology loaded" };
     }
@@ -137,16 +194,21 @@ class MockEngine implements SimEngine {
     const path = this.dijkstra(srcNode.id, dstNode.id);
     if (!path) return { hops: [], result: "unreachable", drop_reason: "No route to destination" };
 
+    const overlay = this.computeOverlay(path);
     const hops: PathHop[] = [];
 
     for (let i = 0; i < path.length; i++) {
       const nodeId = path[i];
       const node: Node = this.graph.nodes.get(nodeId)!;
+      const prevNodeId = i > 0 ? path[i - 1] : null;
+      const nextNodeId = i < path.length - 1 ? path[i + 1] : null;
+      // The stack shows the egress segment (i→i+1); the last hop shows its ingress segment.
+      const segmentIdx = nextNodeId ? i : i - 1;
       let ingressIface: string | null = null;
       let egressIface: string | null = null;
 
-      if (i > 0) {
-        const prevLink = this.findLinkBetween(path[i - 1], nodeId);
+      if (prevNodeId) {
+        const prevLink = this.findLinkBetween(prevNodeId, nodeId);
         if (prevLink) {
           ingressIface = prevLink.source.node === nodeId
             ? prevLink.source.interface
@@ -154,14 +216,22 @@ class MockEngine implements SimEngine {
         }
       }
 
-      if (i < path.length - 1) {
-        const nextLink = this.findLinkBetween(nodeId, path[i + 1]);
+      if (nextNodeId) {
+        const nextLink = this.findLinkBetween(nodeId, nextNodeId);
         if (nextLink) {
           egressIface = nextLink.source.node === nodeId
             ? nextLink.source.interface
             : nextLink.target.interface;
         }
       }
+
+      const packetStack = this.buildPacketStack(packet, icmpMessage, overlay, segmentIdx, {
+        nodeId,
+        ingressIface,
+        egressIface,
+        prevNodeId,
+        nextNodeId,
+      });
 
       if (ingressIface && node.interfaces?.[ingressIface]?.acl_in) {
         const aclName = node.interfaces[ingressIface].acl_in!;
@@ -172,6 +242,7 @@ class MockEngine implements SimEngine {
             node_id: nodeId,
             ingress_interface: ingressIface,
             egress_interface: egressIface,
+            packet_stack: packetStack,
             acl_result: {
               acl_name: aclName,
               matched_rule: result.rule,
@@ -191,10 +262,137 @@ class MockEngine implements SimEngine {
         node_id: nodeId,
         ingress_interface: ingressIface,
         egress_interface: egressIface,
+        packet_stack: packetStack,
       });
     }
 
     return { hops, result: "delivered" };
+  }
+
+  // Pick the overlay (if any) applied on the underlay between two encap endpoints.
+  // SRv6 takes precedence over VXLAN (EVPN-over-SRv6 replaces VXLAN transport).
+  private computeOverlay(path: string[]): Overlay {
+    const g = this.graph!;
+    const sidOf = (n: Node): string =>
+      n.srv6?.sids?.[0]?.sid ?? n.srv6?.locator ?? "";
+
+    const srv6 = path
+      .map((id, i) => ({ i, node: g.nodes.get(id)! }))
+      .filter((w) => (w.node.srv6?.sids?.length ?? 0) > 0 || !!w.node.srv6?.locator);
+    if (srv6.length >= 2) {
+      return {
+        type: "srv6",
+        startIdx: srv6[0].i,
+        endIdx: srv6[srv6.length - 1].i,
+        waypoints: srv6.map((w) => w.i),
+        sids: srv6.map((w) => sidOf(w.node)),
+        srcSid: srv6[0].node.srv6?.locator ?? sidOf(srv6[0].node),
+      };
+    }
+
+    const vteps = path
+      .map((id, i) => ({ i, node: g.nodes.get(id)! }))
+      .filter((w) => !!w.node.evpn?.vtep_ip);
+    if (vteps.length >= 2) {
+      const ingress = vteps[0].node;
+      const egress = vteps[vteps.length - 1].node;
+      return {
+        type: "vxlan",
+        startIdx: vteps[0].i,
+        endIdx: vteps[vteps.length - 1].i,
+        outerSrc: ingress.evpn!.vtep_ip!,
+        outerDst: egress.evpn!.vtep_ip!,
+        vni: ingress.evpn!.vnis?.[0]?.vni ?? 0,
+      };
+    }
+    return null;
+  }
+
+  // Build the header stack as framed on this hop's wire (outer→inner).
+  // L2 MACs are rewritten per segment; on underlay segments inside an overlay
+  // the original packet is wrapped in VXLAN or SRv6 outer headers.
+  private buildPacketStack(
+    packet: PacketHeader,
+    icmpMessage: "echo-request" | "echo-reply",
+    overlay: Overlay,
+    segmentIdx: number,
+    ctx: {
+      nodeId: string;
+      ingressIface: string | null;
+      egressIface: string | null;
+      prevNodeId: string | null;
+      nextNodeId: string | null;
+    }
+  ): PacketLayer[] {
+    // Real MAC if collected; otherwise a deterministic per-interface fallback
+    // so the L2 rewrite is still visible on topologies without MAC data.
+    const macOf = (nodeId: string | null, iface: string | null): string | null =>
+      nodeId && iface
+        ? this.graph?.nodes.get(nodeId)?.interfaces?.[iface]?.mac ?? synthMac(nodeId, iface)
+        : null;
+
+    const ifaceOnLink = (link: Link | null, nodeId: string): string | null =>
+      link ? (link.source.node === nodeId ? link.source.interface : link.target.interface) : null;
+
+    let srcMac: string | null = null;
+    let dstMac: string | null = null;
+    if (ctx.egressIface && ctx.nextNodeId) {
+      // Framing on the egress segment toward the next node.
+      const nextLink = this.findLinkBetween(ctx.nodeId, ctx.nextNodeId);
+      srcMac = macOf(ctx.nodeId, ctx.egressIface);
+      dstMac = macOf(ctx.nextNodeId, ifaceOnLink(nextLink, ctx.nextNodeId));
+    } else if (ctx.ingressIface && ctx.prevNodeId) {
+      // Final hop: framing as received on the ingress segment.
+      const prevLink = this.findLinkBetween(ctx.prevNodeId, ctx.nodeId);
+      srcMac = macOf(ctx.prevNodeId, ifaceOnLink(prevLink, ctx.prevNodeId));
+      dstMac = macOf(ctx.nodeId, ctx.ingressIface);
+    }
+
+    // This segment is encapsulated if it lies on the underlay between the endpoints.
+    const encapsulated =
+      !!overlay && segmentIdx >= overlay.startIdx && segmentIdx < overlay.endIdx;
+
+    const l4: PacketLayer[] = [];
+    if (packet.protocol === "tcp" || packet.protocol === "udp") {
+      l4.push({ kind: packet.protocol, src_port: packet.src_port, dst_port: packet.dst_port });
+    } else if (packet.protocol === "icmp") {
+      l4.push({ kind: "icmp", message: icmpMessage });
+    }
+
+    const ethernet: PacketLayer = { kind: "ethernet", src_mac: srcMac, dst_mac: dstMac };
+
+    if (!encapsulated || !overlay) {
+      return [ethernet, { kind: "ipv4", src: packet.src_ip, dst: packet.dst_ip }, ...l4];
+    }
+
+    const innerIp: PacketLayer = {
+      kind: "ipv4",
+      src: packet.src_ip,
+      dst: packet.dst_ip,
+      role: "inner",
+    };
+
+    let outer: PacketLayer[];
+    if (overlay.type === "vxlan") {
+      outer = [
+        { kind: "ipv4", src: overlay.outerSrc, dst: overlay.outerDst, role: "outer" },
+        { kind: "udp", dst_port: 4789 },
+        { kind: "vxlan", vni: overlay.vni },
+      ];
+    } else {
+      // SRv6: outer IPv6 dst = active SID (next waypoint ahead of this segment).
+      const ahead = overlay.waypoints.filter((w) => w > segmentIdx);
+      const activeSid =
+        ahead.length > 0
+          ? overlay.sids[overlay.waypoints.indexOf(ahead[0])]
+          : overlay.sids[overlay.sids.length - 1];
+      outer = [
+        { kind: "ipv6", src: overlay.srcSid, dst: activeSid, role: "outer" },
+        { kind: "srh", segments: overlay.sids, segments_left: Math.max(0, ahead.length - 1) },
+      ];
+    }
+
+    return [ethernet, ...outer, innerIp, ...l4];
   }
 
   detectAclShadows(aclName: string): ShadowedRule[] {

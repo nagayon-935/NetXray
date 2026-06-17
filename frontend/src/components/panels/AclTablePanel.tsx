@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { useTopologyStore } from "../../stores/topology-store";
 import { getEngine } from "../../engine/wasm-engine";
-import { PanelFrame } from "./shared/PanelFrame";
 
 export function AclTablePanel() {
   const ir = useTopologyStore((s) => s.ir);
@@ -19,11 +18,7 @@ export function AclTablePanel() {
   }, [selectedAclName, ir, setShadowedRules]);
 
   if (!ir?.policies?.acls || aclNames.length === 0) {
-    return (
-      <PanelFrame title="ACL Viewer" onClose={() => selectAcl(null)} wide>
-        <div className="text-sm text-slate-400">No ACLs defined</div>
-      </PanelFrame>
-    );
+    return <div className="text-sm text-slate-400">No ACLs defined</div>;
   }
 
   const rules = selectedAclName ? ir.policies.acls[selectedAclName] ?? [] : [];
@@ -31,7 +26,7 @@ export function AclTablePanel() {
   const shadowedSeqs = new Set(shadows.map((s) => s.shadowed_seq));
 
   return (
-    <PanelFrame title="ACL Viewer" onClose={() => selectAcl(null)} wide>
+    <>
       <div className="border-b border-slate-100 -mx-4 px-3 pb-3">
         <div className="text-xs text-slate-500 uppercase tracking-wide mb-2">Select ACL</div>
         <div className="flex flex-wrap gap-1">
@@ -120,6 +115,6 @@ export function AclTablePanel() {
           )}
         </>
       )}
-    </PanelFrame>
+    </>
   );
 }

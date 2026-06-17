@@ -5,6 +5,8 @@ import { VIEW_DEFS, type ViewId } from "../../lib/views";
 import { useLayerStore, LAYER_DEFS, type LayerId } from "../../stores/layer-store";
 import { useLabStore } from "../../stores/lab-store";
 import { useIRLoad } from "../../hooks/useIRLoad";
+import { notify } from "../../stores/toast-store";
+import type { NetXrayIR } from "../../types/netxray-ir";
 import type { LayoutPreset } from "../../hooks/useTopologyLayout";
 
 interface SimToolbarProps {
@@ -14,9 +16,8 @@ interface SimToolbarProps {
 
 export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
   const ir = useTopologyStore((s) => s.ir);
-  const loadIR = useTopologyStore((s) => s.loadIR);
-  const setActivePanel = useTopologyStore((s) => s.setActivePanel);
-  const activePanel = useTopologyStore((s) => s.activePanel);
+  const toggleTab = useTopologyStore((s) => s.toggleTab);
+  const openTabs = useTopologyStore((s) => s.openTabs);
   const engineStatus = useTopologyStore((s) => s.engineStatus);
 
   const activeViewId = useViewStore((s) => s.activeView);
@@ -25,14 +26,9 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
   const layers = useLayerStore((s) => s.layers);
   const toggleLayer = useLayerStore((s) => s.toggleLayer);
 
-  const setLabRunId = useLabStore((s) => s.setRunId);
-  const setLabStatus = useLabStore((s) => s.setStatus);
-  const setLabTopologyFile = useLabStore((s) => s.setTopologyFile);
-
   const { handleFile, handleApiLoad, fetchTopologyList } = useIRLoad();
   const [apiTopos, setApiTopos] = useState<{ name: string; node_count: number }[] | null>(null);
   const [showApiMenu, setShowApiMenu] = useState(false);
-  const [cloning, setCloning] = useState(false);
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -53,7 +49,7 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
       setApiTopos(list);
       setShowApiMenu(true);
     } catch {
-      alert("Cannot reach API server. Is the backend running on port 8000?");
+      notify("error", "Cannot reach API server. Is the backend running on port 8000?");
     }
   }, [showApiMenu, fetchTopologyList]);
 
@@ -135,107 +131,7 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
                 ))}
               </div>
 
-              <div className="border-t border-slate-100 mt-1 pt-1 p-2 space-y-2">
-                <div className="text-[10px] text-slate-400 uppercase font-bold mb-1">
-                  Scan Running Lab
-                </div>
-                <input
-                  type="text"
-                  placeholder="e.g. frr.clab.yml or frr"
-                  className="w-full text-[10px] font-mono px-2 py-1 border rounded"
-                  id="clab-path-input"
-                  onClick={(e) => e.stopPropagation()}
-                />
-
-                <button
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    const input = document.getElementById("clab-path-input") as HTMLInputElement;
-                    const path = input.value;
-                    if (!path) return;
-                    try {
-                      const res = await fetch("/api/collect", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          topology_name: "collected-lab",
-                          clab_topology: path,
-                        }),
-                      });
-                      if (!res.ok) throw new Error("Failed");
-                      const ir = await res.json();
-                      loadIR(ir);
-                      setShowApiMenu(false);
-                    } catch {
-                      alert("Scan failed. Check if path is correct and lab is running.");
-                    }
-                  }}
-                  className="w-full bg-blue-500 text-white text-[10px] font-bold py-1 rounded hover:bg-blue-600"
-                >
-                  SCAN &amp; LOAD
-                </button>
-
-                <input
-                  type="text"
-                  placeholder="new-topology-name"
-                  className="w-full text-[10px] font-mono px-2 py-1 border rounded"
-                  id="clab-clone-name-input"
-                  onClick={(e) => e.stopPropagation()}
-                  defaultValue="netxray-clone"
-                />
-                <button
-                  disabled={cloning}
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    const pathInput = document.getElementById("clab-path-input") as HTMLInputElement;
-                    const nameInput = document.getElementById("clab-clone-name-input") as HTMLInputElement;
-                    const path = pathInput.value;
-                    const topoName = nameInput.value || "netxray-clone";
-                    if (!path) return;
-                    setCloning(true);
-                    try {
-                      const collectRes = await fetch("/api/collect", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          topology_name: "collected-lab",
-                          clab_topology: path,
-                        }),
-                      });
-                      if (!collectRes.ok) {
-                        const body = await collectRes.json().catch(() => ({}));
-                        throw new Error(body.detail ?? "Collect failed");
-                      }
-                      const collectedIr = await collectRes.json();
-                      loadIR(collectedIr);
-
-                      const cloneRes = await fetch("/api/iac/clone-to-clab", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ ir: collectedIr, topo_name: topoName }),
-                      });
-                      if (!cloneRes.ok) {
-                        const body = await cloneRes.json().catch(() => ({}));
-                        throw new Error(body.detail ?? "Clone failed");
-                      }
-                      const { run_id, topology_file } = await cloneRes.json();
-                      setLabRunId(run_id);
-                      setLabStatus("deploying");
-                      if (topology_file) setLabTopologyFile(topology_file);
-                      setActivePanel("lab");
-                      setShowApiMenu(false);
-                    } catch (err) {
-                      alert(`Clone failed: ${err instanceof Error ? err.message : "unknown"}`);
-                    } finally {
-                      setCloning(false);
-                    }
-                  }}
-                  className="w-full bg-emerald-500 text-white text-[10px] font-bold py-1 rounded hover:bg-emerald-600 disabled:opacity-50"
-                  title="Collect IR from the running lab and deploy a mirrored containerlab copy"
-                >
-                  {cloning ? "CLONING..." : "SCAN & CLONE"}
-                </button>
-              </div>
+              <ClabScanForm onClose={() => setShowApiMenu(false)} />
             </div>
           )}
         </div>
@@ -310,9 +206,9 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
       <div className="flex items-center gap-1">
         <span className="text-slate-500 font-medium">Panel:</span>
         <button
-          onClick={() => setActivePanel(activePanel === "acl" ? null : "acl")}
+          onClick={() => toggleTab("acl")}
           className={`px-2 py-1 border rounded ${
-            activePanel === "acl"
+            openTabs.includes("acl")
               ? "bg-blue-50 border-blue-300 text-blue-700"
               : "bg-white border-slate-200 hover:bg-slate-100"
           }`}
@@ -320,9 +216,9 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
           ACL
         </button>
         <button
-          onClick={() => setActivePanel(activePanel === "packet" ? null : "packet")}
+          onClick={() => toggleTab("packet")}
           className={`px-2 py-1 border rounded ${
-            activePanel === "packet"
+            openTabs.includes("packet")
               ? "bg-blue-50 border-blue-300 text-blue-700"
               : "bg-white border-slate-200 hover:bg-slate-100"
           }`}
@@ -330,9 +226,9 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
           Packet Sim
         </button>
         <button
-          onClick={() => setActivePanel(activePanel === "lab" ? null : "lab")}
+          onClick={() => toggleTab("lab")}
           className={`px-2 py-1 border rounded transition-colors ${
-            activePanel === "lab"
+            openTabs.includes("lab")
               ? "bg-emerald-50 border-emerald-400 text-emerald-700"
               : "bg-white border-slate-200 hover:bg-slate-100"
           }`}
@@ -341,6 +237,125 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
           Lab
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── Clab scan / clone sub-form ────────────────────────────────────────────────
+
+function ClabScanForm({ onClose }: { onClose: () => void }) {
+  const loadIR = useTopologyStore((s) => s.loadIR);
+  const openPanel = useTopologyStore((s) => s.openPanel);
+  const setLabRunId = useLabStore((s) => s.setRunId);
+  const setLabStatus = useLabStore((s) => s.setStatus);
+  const setLabTopologyFile = useLabStore((s) => s.setTopologyFile);
+
+  const [path, setPath] = useState("");
+  const [cloneName, setCloneName] = useState("netxray-clone");
+  const [scanning, setScanning] = useState(false);
+  const [cloning, setCloning] = useState(false);
+
+  const collect = async (): Promise<NetXrayIR> => {
+    const res = await fetch("/api/collect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topology_name: "collected-lab", clab_topology: path }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail ?? "Collect failed");
+    }
+    return res.json();
+  };
+
+  const handleScan = async () => {
+    if (!path) return;
+    setScanning(true);
+    try {
+      const ir = await collect();
+      loadIR(ir);
+      notify("success", "Lab scanned and loaded");
+      onClose();
+    } catch (err) {
+      notify("error", `Scan failed: ${err instanceof Error ? err.message : "unknown"}`);
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const handleClone = async () => {
+    if (!path) return;
+    setCloning(true);
+    try {
+      const collectedIr = await collect();
+      loadIR(collectedIr);
+
+      const cloneRes = await fetch("/api/iac/clone-to-clab", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ir: collectedIr, topo_name: cloneName || "netxray-clone" }),
+      });
+      if (!cloneRes.ok) {
+        const body = await cloneRes.json().catch(() => ({}));
+        throw new Error(body.detail ?? "Clone failed");
+      }
+      const { run_id, topology_file } = await cloneRes.json();
+      setLabRunId(run_id);
+      setLabStatus("deploying");
+      if (topology_file) setLabTopologyFile(topology_file);
+      openPanel("lab");
+      notify("success", "Clone deploying — see Lab Control");
+      onClose();
+    } catch (err) {
+      notify("error", `Clone failed: ${err instanceof Error ? err.message : "unknown"}`);
+    } finally {
+      setCloning(false);
+    }
+  };
+
+  const busy = scanning || cloning;
+
+  return (
+    <div className="border-t border-slate-100 mt-1 pt-1 p-2 space-y-2">
+      <div className="text-[10px] text-slate-400 uppercase font-bold mb-1">Scan Running Lab</div>
+      <input
+        type="text"
+        value={path}
+        onChange={(e) => setPath(e.target.value)}
+        placeholder="e.g. frr.clab.yml or frr"
+        className="w-full text-[10px] font-mono px-2 py-1 border rounded"
+        onClick={(e) => e.stopPropagation()}
+      />
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          handleScan();
+        }}
+        disabled={busy || !path}
+        className="w-full bg-blue-500 text-white text-[10px] font-bold py-1 rounded hover:bg-blue-600 disabled:opacity-50"
+      >
+        {scanning ? "SCANNING..." : "SCAN & LOAD"}
+      </button>
+
+      <input
+        type="text"
+        value={cloneName}
+        onChange={(e) => setCloneName(e.target.value)}
+        placeholder="new-topology-name"
+        className="w-full text-[10px] font-mono px-2 py-1 border rounded"
+        onClick={(e) => e.stopPropagation()}
+      />
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          handleClone();
+        }}
+        disabled={busy || !path}
+        className="w-full bg-emerald-500 text-white text-[10px] font-bold py-1 rounded hover:bg-emerald-600 disabled:opacity-50"
+        title="Collect IR from the running lab and deploy a mirrored containerlab copy"
+      >
+        {cloning ? "CLONING..." : "SCAN & CLONE"}
+      </button>
     </div>
   );
 }

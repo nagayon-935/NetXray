@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useTopologyStore } from "../stores/topology-store";
+import { notify } from "../stores/toast-store";
 import { fetchTopologyList, loadIRFromFile, loadIRFromUrl } from "../lib/ir-loader";
 
 export function useIRLoad(onLoad?: () => void) {
@@ -16,7 +17,7 @@ export function useIRLoad(onLoad?: () => void) {
       const isJson = lower.endsWith(".json");
 
       if (!isJson && !isYaml) {
-        alert("Unsupported file type. Use .json or .clab.yml / .yaml.");
+        notify("error", "Unsupported file type. Use .json or .clab.yml / .yaml.");
         return;
       }
 
@@ -38,9 +39,10 @@ export function useIRLoad(onLoad?: () => void) {
           const ir = await res.json();
           loadIR(ir);
         }
+        notify("success", `Loaded ${file.name}`);
         onLoad?.();
       } catch (err) {
-        alert(`Failed to load IR: ${err instanceof Error ? err.message : err}`);
+        notify("error", `Failed to load IR: ${err instanceof Error ? err.message : err}`);
       }
     },
     [loadIR, onLoad]
@@ -51,9 +53,10 @@ export function useIRLoad(onLoad?: () => void) {
       try {
         const ir = await loadIRFromUrl(`/api/topology/${name}`);
         loadIR(ir);
+        notify("success", `Loaded topology "${name}"`);
         onLoad?.();
       } catch (err) {
-        alert(`Failed to load topology from API: ${err instanceof Error ? err.message : err}`);
+        notify("error", `Failed to load topology from API: ${err instanceof Error ? err.message : err}`);
       }
     },
     [loadIR, onLoad]

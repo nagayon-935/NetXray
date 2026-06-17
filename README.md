@@ -121,10 +121,13 @@ docker run -d -p 8000:8000 --name netxray netxray:latest
 - src / dst / プロトコル / ポートを指定してパス追跡
 - エッジアニメーションでフロー方向を可視化
 
-### スナップショット
+### containerlab 連携
 
-- 任意タイミングで IR 状態を保存（最大 20 件）
-- スナップショット間の diff 表示（ノード増減・リンク状態変化）
+- 稼働中ラボから IR を収集（collect）
+- IR からの clab トポロジ生成・デプロイ / 破棄 / 再デプロイ（deploy / destroy / redeploy）
+- リンク impairment（netem: 遅延 / ロス / 帯域）の適用
+
+> **未実装（将来計画）**: IR スナップショット保存・スナップショット間の diff 表示。
 
 ## 技術スタック
 

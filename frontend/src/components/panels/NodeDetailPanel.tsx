@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { useTopologyStore } from "../../stores/topology-store";
 import { detectBgpRoleMismatches, type BgpRoleMismatch } from "../../lib/bgp-overlay";
 import type { Node, BgpSession, Srv6Sid, Vni } from "../../types/netxray-ir";
-import { PanelFrame } from "./shared/PanelFrame";
 
 // ─── Color maps ─────────────────────────────────────────────────────────────
 
@@ -434,7 +433,6 @@ function EvpnTab({ node }: { node: Node }) {
 export function NodeDetailPanel() {
   const ir = useTopologyStore((s) => s.ir);
   const selectedNodeId = useTopologyStore((s) => s.selectedNodeId);
-  const selectNode = useTopologyStore((s) => s.selectNode);
   const [activeTab, setActiveTab] = useState<Tab>("general");
 
   // All hooks MUST come before any early returns (Rules of Hooks)
@@ -471,9 +469,13 @@ export function NodeDetailPanel() {
   const currentTab = tabs.find((t) => t.id === activeTab) ? activeTab : "general";
 
   return (
-    <PanelFrame title={node.hostname || node.id} onClose={() => selectNode(null)}>
+    <>
+      <div className="text-xs font-semibold text-slate-700 truncate">
+        {node.hostname || node.id}
+      </div>
+
       {/* Tab bar */}
-      <div className="flex border-b border-slate-200 bg-slate-50 flex-shrink-0 overflow-x-auto -mx-4 -mt-3 px-4">
+      <div className="flex border-b border-slate-200 bg-slate-50 flex-shrink-0 overflow-x-auto -mx-4 px-4">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -502,6 +504,6 @@ export function NodeDetailPanel() {
         {currentTab === "srv6" && <Srv6Tab node={node} />}
         {currentTab === "evpn" && <EvpnTab node={node} />}
       </div>
-    </PanelFrame>
+    </>
   );
 }

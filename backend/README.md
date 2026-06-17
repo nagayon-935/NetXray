@@ -22,18 +22,58 @@ uv run uvicorn api.main:app --reload --port 8000
 
 ## API エンドポイント
 
+### トポロジ管理
+
 | メソッド | パス | 説明 |
 |---|---|---|
 | `GET` | `/api/topologies` | 保存済み IR ファイルの一覧 |
 | `GET` | `/api/topology/{name}` | 指定トポロジの IR JSON を返す |
+| `POST` | `/api/topology/{name}` | IR JSON を保存 |
+| `DELETE` | `/api/topology/{name}` | IR を削除 |
 | `POST` | `/api/collect` | containerlab トポロジから IR を収集・保存 |
+
+### IaC（clab 生成・変換）
+
+| メソッド | パス | 説明 |
+|---|---|---|
+| `POST` | `/api/iac/export/clab` | IR から clab トポロジ YAML を生成 |
+| `POST` | `/api/iac/deploy-clab` | 生成した clab トポロジをデプロイ |
+| `POST` | `/api/iac/from-clab-yaml` | clab YAML を IR に変換 |
+| `POST` | `/api/iac/clone-to-clab` | IR を複製し clab としてデプロイ |
+| `POST` | `/api/iac/config/generate` | ノードの startup-config を生成 |
+
+### Lab ライフサイクル
+
+| メソッド | パス | 説明 |
+|---|---|---|
+| `POST` | `/api/lab/deploy` | containerlab トポロジをデプロイ |
+| `POST` | `/api/lab/destroy` | トポロジを破棄 |
+| `POST` | `/api/lab/redeploy` | 再デプロイ |
+| `GET` | `/api/lab/status` | デプロイ状態を取得 |
+| `GET` | `/api/lab/logs/{run_id}` | 実行ログを取得 |
+
+### リンク impairment（netem）
+
+| メソッド | パス | 説明 |
+|---|---|---|
+| `POST` | `/api/link/impairment` | リンクに遅延 / ロス / 帯域制限を適用 |
+| `DELETE` | `/api/link/impairment` | impairment を解除 |
+| `GET` | `/api/link/impairments` | 適用中の impairment 一覧 |
+
+### その他
+
+| メソッド | パス | 説明 |
+|---|---|---|
+| `WS` | `/api/ws/lab/{run_id}` | Lab ライフサイクルログのストリーミング |
+| `GET` | `/metrics` | Prometheus メトリクス |
+| `GET` | `/health` | ヘルスチェック |
 
 ### POST /api/collect リクエスト例
 
 ```json
 {
   "topology_name": "my-lab",
-  "clab_topology_file": "/path/to/clab.yml"
+  "clab_topology": "/path/to/clab.yml"
 }
 ```
 
@@ -45,11 +85,21 @@ backend/
 │   ├── main.py            # FastAPI アプリ・起動設定
 │   ├── config.py          # Pydantic Settings（環境変数）
 │   ├── schemas.py         # リクエスト/レスポンス型
+│   ├── state.py           # 現在ロード中の IR 状態
 │   └── routes/
-│       ├── topology.py    # GET /api/topologies, GET /api/topology/{name}
-│       └── collect.py     # POST /api/collect
+│       ├── topology.py    # トポロジの一覧 / 取得 / 保存 / 削除
+│       ├── collect.py     # POST /api/collect
+│       ├── iac.py         # clab 生成・変換・デプロイ・config 生成
+│       ├── lab.py         # Lab ライフサイクル（deploy / destroy / redeploy / status / logs）
+│       ├── link.py        # リンク impairment（netem）
+│       ├── metrics.py     # Prometheus メトリクス
+│       └── ws.py          # WebSocket（Lab ログストリーミング）
 ├── collector/
 │   ├── clab.py            # containerlab inspect 連携
+│   ├── clab_lifecycle.py  # clab deploy / destroy サブプロセス管理
+│   ├── clab_netem.py      # netem によるリンク impairment 適用
+│   ├── telemetry_manager.py # WebSocket チャンネル管理（ログ配信）
+│   ├── gnmi_client.py     # gNMI クライアント（スタブ・将来拡張）
 │   ├── ssh_client.py      # Netmiko SSH 接続ラッパー
 │   ├── driver_base.py     # VendorDriver プロトコル定義
 │   └── drivers/

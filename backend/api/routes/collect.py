@@ -23,6 +23,7 @@ def collect_topology(req: CollectRequest) -> dict:
             inspect_lab,
             get_links_from_topo,
             get_topo_file_from_container,
+            get_graph_positions_from_topo,
         )
         from collector.drivers import DRIVER_REGISTRY
         from translator.ir_builder import build_ir
@@ -42,6 +43,7 @@ def collect_topology(req: CollectRequest) -> dict:
         # yaml read fails silently; recover via the clab-topo-file label on
         # any running node container.
         clab_links = get_links_from_topo(topo_path) if topo_path else []
+        graph_positions = get_graph_positions_from_topo(topo_path) if topo_path else {}
         if not clab_links:
             for node in nodes:
                 detected = get_topo_file_from_container(node.name)
@@ -50,6 +52,8 @@ def collect_topology(req: CollectRequest) -> dict:
                         "Auto-detected topology file via clab-topo-file label: %s", detected
                     )
                     clab_links = get_links_from_topo(detected)
+                    if not graph_positions:
+                        graph_positions = get_graph_positions_from_topo(detected)
                     break
             if not clab_links:
                 logger.warning(
@@ -105,6 +109,30 @@ def collect_topology(req: CollectRequest) -> dict:
                     errors.append(err)
 
         ir = build_ir(nodes, driver_outputs, PARSER_REGISTRY, clab_links=clab_links)
+
+        # Embed graph-posX/Y positions so the frontend can skip auto-layout.
+        # YAML keys are short node names (e.g. "CE01"); IR node IDs are full
+        # container names (e.g. "clab-SR-MPLS-CE01"). Build a short→full map
+        # using the same short_name detection as ir_builder.
+        if graph_positions:
+            short_to_ir: dict[str, str] = {}
+            for node in nodes:
+                full = node.name
+                short = getattr(node, "short_name", None)
+                if short:
+                    short_to_ir[short] = full
+                # last segment of full name as fallback (clab-lab-CE01 → CE01)
+                short_to_ir[full.split("-")[-1]] = full
+                short_to_ir[full] = full
+
+            mapped_positions = {}
+            for yaml_name, pos in graph_positions.items():
+                ir_id = short_to_ir.get(yaml_name, yaml_name)
+                mapped_positions[ir_id] = pos
+
+            ir.setdefault("meta", {})["positions"] = mapped_positions
+            logger.info("Embedded graph positions for %d nodes", len(mapped_positions))
+
         _validate_ir(ir)
 
         path = _topo_path(req.topology_name)
