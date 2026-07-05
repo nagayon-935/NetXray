@@ -295,7 +295,7 @@ export function SimToolbar({ onLayoutChange, onLoadSample }: SimToolbarProps) {
 
       <div className="flex items-center gap-1">
         <span className="text-slate-500 font-medium">Layout:</span>
-        {(["spine-leaf", "layered", "force"] as LayoutPreset[]).map((preset) => (
+        {(["auto", "spine-leaf", "layered", "force"] as LayoutPreset[]).map((preset) => (
           <button
             key={preset}
             onClick={() => onLayoutChange(preset)}

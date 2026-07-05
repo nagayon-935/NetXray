@@ -4,7 +4,8 @@ import { Position, type Node as FlowNode, type Edge as FlowEdge } from "@xyflow/
 
 const elk = new ELK();
 
-export type LayoutPreset = "spine-leaf" | "layered" | "force";
+export type LayoutPreset = "auto" | "spine-leaf" | "layered" | "force";
+type ConcretePreset = "spine-leaf" | "layered" | "force";
 
 const NODE_WIDTH = 180;
 const NODE_HEIGHT = 60;
@@ -19,53 +20,61 @@ interface ElkNode {
   children: ElkNode[];
 }
 
+type Tier = "spine" | "leaf" | "host";
+
 /**
- * Classify nodes into spine / leaf buckets by degree on the physical graph.
- * Spine = high-degree aggregators (top layer).
- * Leaf  = endpoints connected to at most one aggregator (bottom layer).
- * Everything else is left to ELK's default layering.
+ * Classify nodes into host / leaf / spine tiers using node.type + adjacency,
+ * not graph degree. Host = node.type "host". Leaf = a switch/router directly
+ * connected to at least one host. Spine = a switch/router with no host
+ * neighbors that connects to at least one leaf.
+ *
+ * Returns null when the topology isn't a host/leaf tiered fabric (no hosts,
+ * or no switch/router directly touching a host) so callers can fall back to
+ * unconstrained layering instead of forcing a tiered shape onto e.g. a small
+ * router mesh.
  */
-function classifySpineLeaf(
+function classifyTiers(
   nodes: FlowNode[],
   edges: FlowEdge[],
-): Map<string, "spine" | "leaf"> {
-  const degree = new Map<string, number>();
+): Map<string, Tier> | null {
+  const neighbors = new Map<string, Set<string>>();
   for (const e of edges) {
-    degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
-    degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
+    if (!neighbors.has(e.source)) neighbors.set(e.source, new Set());
+    if (!neighbors.has(e.target)) neighbors.set(e.target, new Set());
+    neighbors.get(e.source)!.add(e.target);
+    neighbors.get(e.target)!.add(e.source);
   }
 
-  const leafNodeIds = new Set<string>();
+  const isSwitchOrRouter = (n: FlowNode) => n.type === "switch" || n.type === "router";
+
+  const hostIds = new Set(nodes.filter((n) => n.type === "host").map((n) => n.id));
+  if (hostIds.size === 0) return null;
+
+  const leafIds = new Set<string>();
   for (const n of nodes) {
-    if (n.type === "group") continue;
-    if ((degree.get(n.id) ?? 0) <= 1) leafNodeIds.add(n.id);
+    if (!isSwitchOrRouter(n)) continue;
+    const neigh = neighbors.get(n.id) ?? new Set<string>();
+    if ([...neigh].some((id) => hostIds.has(id))) leafIds.add(n.id);
+  }
+  if (leafIds.size === 0) return null;
+
+  const tiers = new Map<string, Tier>();
+  for (const id of hostIds) tiers.set(id, "host");
+  for (const id of leafIds) tiers.set(id, "leaf");
+
+  for (const n of nodes) {
+    if (!isSwitchOrRouter(n) || leafIds.has(n.id)) continue;
+    const neigh = neighbors.get(n.id) ?? new Set<string>();
+    const touchesHost = [...neigh].some((id) => hostIds.has(id));
+    const touchesLeaf = [...neigh].some((id) => leafIds.has(id));
+    if (!touchesHost && touchesLeaf) tiers.set(n.id, "spine");
   }
 
-  // Only call something a "spine" if it connects to multiple leaves *and*
-  // has degree >= 3. Otherwise two routers connected back-to-back would be
-  // misclassified.
-  const classification = new Map<string, "spine" | "leaf">();
-  for (const n of nodes) {
-    if (n.type === "group") continue;
-    const deg = degree.get(n.id) ?? 0;
-    if (leafNodeIds.has(n.id)) {
-      classification.set(n.id, "leaf");
-      continue;
-    }
-    if (deg >= 3) {
-      const leafNeighbors = edges.filter(
-        (e) =>
-          (e.source === n.id && leafNodeIds.has(e.target)) ||
-          (e.target === n.id && leafNodeIds.has(e.source)),
-      ).length;
-      if (leafNeighbors >= 2) classification.set(n.id, "spine");
-    }
-  }
-  return classification;
+  return tiers;
 }
 
 function presetOptions(
-  preset: LayoutPreset,
+  preset: ConcretePreset,
   nodeCount: number,
 ): Record<string, string> {
   const padding = Math.max(20, Math.min(60, 20 + Math.floor(nodeCount / 4)));
@@ -105,12 +114,17 @@ export function useTopologyLayout() {
     async (
       nodes: FlowNode[],
       edges: FlowEdge[],
-      preset: LayoutPreset = "spine-leaf",
+      preset: LayoutPreset = "auto",
     ): Promise<{ nodes: FlowNode[]; edges: FlowEdge[] }> => {
       if (nodes.length === 0) return { nodes, edges };
 
-      const spineLeaf =
-        preset === "spine-leaf" ? classifySpineLeaf(nodes, edges) : null;
+      const tiers =
+        preset === "auto" || preset === "spine-leaf"
+          ? classifyTiers(nodes, edges)
+          : null;
+
+      const effectivePreset: ConcretePreset =
+        preset === "auto" ? (tiers ? "spine-leaf" : "layered") : preset;
 
       const elkNodeMap = new Map<string, ElkNode>();
 
@@ -127,15 +141,16 @@ export function useTopologyLayout() {
             `[top=${groupPad + 20},left=${groupPad},bottom=${groupPad},right=${groupPad}]`;
           layoutOptions["elk.algorithm"] = "layered";
           layoutOptions["elk.direction"] =
-            preset === "layered" ? "RIGHT" : "DOWN";
+            effectivePreset === "layered" ? "RIGHT" : "DOWN";
           layoutOptions["elk.spacing.nodeNode"] = "40";
-        } else if (spineLeaf) {
-          const role = spineLeaf.get(node.id);
+        } else if (tiers && effectivePreset === "spine-leaf") {
+          const role = tiers.get(node.id);
           if (role === "spine") {
             layoutOptions["elk.layered.layering.layerConstraint"] = "FIRST";
-          } else if (role === "leaf") {
+          } else if (role === "host") {
             layoutOptions["elk.layered.layering.layerConstraint"] = "LAST";
           }
+          // leaf: no constraint — ELK naturally places it between spine and host
         }
 
         const elkNode: ElkNode = {
@@ -161,7 +176,7 @@ export function useTopologyLayout() {
 
       const elkGraph = {
         id: "root",
-        layoutOptions: presetOptions(preset, nodes.length),
+        layoutOptions: presetOptions(effectivePreset, nodes.length),
         children: rootChildren,
         edges: edges.map((edge) => ({
           id: edge.id,
@@ -173,9 +188,9 @@ export function useTopologyLayout() {
       const layouted = await elk.layout(elkGraph);
 
       const targetPosition =
-        preset === "layered" ? Position.Left : Position.Top;
+        effectivePreset === "layered" ? Position.Left : Position.Top;
       const sourcePosition =
-        preset === "layered" ? Position.Right : Position.Bottom;
+        effectivePreset === "layered" ? Position.Right : Position.Bottom;
 
       const positionMap = new Map<
         string,

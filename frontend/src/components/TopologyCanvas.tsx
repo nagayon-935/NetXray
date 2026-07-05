@@ -137,7 +137,7 @@ export function TopologyCanvas() {
         layoutApplied.current = true;
         // fall through to merge-with-stored-positions branch below
       } else {
-        applyLayout(styledNodes, styledEdges, activeView.preferredLayout ?? "spine-leaf").then(({ nodes: laid }) => {
+        applyLayout(styledNodes, styledEdges, activeView.preferredLayout ?? "auto").then(({ nodes: laid }) => {
           setNodes(laid);
           setEdges(styledEdges);
           layoutApplied.current = true;
