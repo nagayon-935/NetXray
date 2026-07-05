@@ -134,19 +134,28 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
 
   selectNode: (nodeId) => {
     const { editMode } = get();
-    set({
+    set((s) => ({
       selectedNodeId: nodeId,
       selectedLinkId: null,
-      activePanel: nodeId ? (editMode ? "edit" : "detail") : null,
-    });
+      activePanel: nodeId
+        ? (editMode ? "edit" : "detail")
+        : (s.activePanel === "detail" || s.activePanel === "edit" ? null : s.activePanel),
+    }));
   },
 
   selectLink: (linkId) => {
-    set({ selectedLinkId: linkId, selectedNodeId: null, activePanel: linkId ? "link-detail" : null });
+    set((s) => ({
+      selectedLinkId: linkId,
+      selectedNodeId: null,
+      activePanel: linkId ? "link-detail" : (s.activePanel === "link-detail" ? null : s.activePanel),
+    }));
   },
 
   selectAcl: (aclName) => {
-    set({ selectedAclName: aclName, activePanel: aclName ? "acl" : null });
+    set((s) => ({
+      selectedAclName: aclName,
+      activePanel: aclName ? "acl" : (s.activePanel === "acl" ? null : s.activePanel),
+    }));
   },
 
   setPacketPath: (path) => {
