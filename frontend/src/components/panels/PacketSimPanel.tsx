@@ -1,8 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTopologyStore } from "../../stores/topology-store";
 import { getEngine } from "../../engine/wasm-engine";
 import type { PacketHeader } from "../../engine/types";
 import { PanelFrame } from "./shared/PanelFrame";
+
+function stripCidr(ip: string): string {
+  return ip.split("/")[0];
+}
 
 export function PacketSimPanel() {
   const ir = useTopologyStore((s) => s.ir);
@@ -10,16 +14,46 @@ export function PacketSimPanel() {
   const setPacketPath = useTopologyStore((s) => s.setPacketPath);
   const setActivePanel = useTopologyStore((s) => s.setActivePanel);
 
-  const [srcIp, setSrcIp] = useState("");
-  const [dstIp, setDstIp] = useState("");
+  const nodesWithIps = useMemo(() => {
+    if (!ir) return [];
+    return ir.topology.nodes
+      .map((node) => ({
+        node,
+        ifaces: Object.entries(node.interfaces ?? {}).filter(
+          (entry): entry is [string, typeof entry[1] & { ip: string }] => Boolean(entry[1].ip),
+        ),
+      }))
+      .filter((entry) => entry.ifaces.length > 0);
+  }, [ir]);
+
+  const [srcNodeId, setSrcNodeId] = useState("");
+  const [srcIface, setSrcIface] = useState("");
+  const [dstNodeId, setDstNodeId] = useState("");
+  const [dstIface, setDstIface] = useState("");
   const [protocol, setProtocol] = useState<PacketHeader["protocol"]>("tcp");
   const [dstPort, setDstPort] = useState("80");
 
+  const srcIfaceOptions = nodesWithIps.find((e) => e.node.id === srcNodeId)?.ifaces ?? [];
+  const dstIfaceOptions = nodesWithIps.find((e) => e.node.id === dstNodeId)?.ifaces ?? [];
+
+  const handleSrcNodeChange = (nodeId: string) => {
+    setSrcNodeId(nodeId);
+    setSrcIface(nodesWithIps.find((e) => e.node.id === nodeId)?.ifaces[0]?.[0] ?? "");
+  };
+
+  const handleDstNodeChange = (nodeId: string) => {
+    setDstNodeId(nodeId);
+    setDstIface(nodesWithIps.find((e) => e.node.id === nodeId)?.ifaces[0]?.[0] ?? "");
+  };
+
+  const srcIp = srcIfaceOptions.find(([name]) => name === srcIface)?.[1].ip;
+  const dstIp = dstIfaceOptions.find(([name]) => name === dstIface)?.[1].ip;
+
   const handleSimulate = () => {
-    if (!ir) return;
+    if (!ir || !srcIp || !dstIp) return;
     const packet: PacketHeader = {
-      src_ip: srcIp,
-      dst_ip: dstIp,
+      src_ip: stripCidr(srcIp),
+      dst_ip: stripCidr(dstIp),
       protocol,
       dst_port: dstPort ? parseInt(dstPort, 10) : undefined,
     };
@@ -35,24 +69,62 @@ export function PacketSimPanel() {
     <PanelFrame title="Packet Simulation" onClose={() => setActivePanel(null)}>
       <div className="space-y-3">
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Source IP</label>
-          <input
-            type="text"
-            value={srcIp}
-            onChange={(e) => setSrcIp(e.target.value)}
-            placeholder="e.g. 10.0.12.1"
-            className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 font-mono focus:outline-none focus:border-blue-400"
-          />
+          <label className="block text-xs text-slate-500 mb-1">Source</label>
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              value={srcNodeId}
+              onChange={(e) => handleSrcNodeChange(e.target.value)}
+              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-blue-400"
+            >
+              <option value="">Select node…</option>
+              {nodesWithIps.map(({ node }) => (
+                <option key={node.id} value={node.id}>
+                  {node.hostname ?? node.id}
+                </option>
+              ))}
+            </select>
+            <select
+              value={srcIface}
+              onChange={(e) => setSrcIface(e.target.value)}
+              disabled={!srcNodeId}
+              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 font-mono focus:outline-none focus:border-blue-400 disabled:opacity-50"
+            >
+              {srcIfaceOptions.map(([name, iface]) => (
+                <option key={name} value={name}>
+                  {name} ({stripCidr(iface.ip)})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Destination IP</label>
-          <input
-            type="text"
-            value={dstIp}
-            onChange={(e) => setDstIp(e.target.value)}
-            placeholder="e.g. 3.3.3.3"
-            className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 font-mono focus:outline-none focus:border-blue-400"
-          />
+          <label className="block text-xs text-slate-500 mb-1">Destination</label>
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              value={dstNodeId}
+              onChange={(e) => handleDstNodeChange(e.target.value)}
+              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-blue-400"
+            >
+              <option value="">Select node…</option>
+              {nodesWithIps.map(({ node }) => (
+                <option key={node.id} value={node.id}>
+                  {node.hostname ?? node.id}
+                </option>
+              ))}
+            </select>
+            <select
+              value={dstIface}
+              onChange={(e) => setDstIface(e.target.value)}
+              disabled={!dstNodeId}
+              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 font-mono focus:outline-none focus:border-blue-400 disabled:opacity-50"
+            >
+              {dstIfaceOptions.map(([name, iface]) => (
+                <option key={name} value={name}>
+                  {name} ({stripCidr(iface.ip)})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
