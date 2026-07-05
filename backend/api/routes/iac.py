@@ -15,7 +15,12 @@ from pydantic import BaseModel
 
 from api.config import settings
 from api.schemas import ClabYamlImportRequest, CloneToClabRequest
-from collector.clab_lifecycle import active_run_id, is_running, start_lifecycle
+from collector.clab_lifecycle import (
+    active_run_id,
+    is_running,
+    start_lifecycle,
+    start_node_watch,
+)
 from collector.telemetry_manager import telemetry_manager
 from plugins import get_plugin
 from translator.clab_yaml_importer import import_from_yaml
@@ -120,6 +125,7 @@ async def clone_to_clab(req: CloneToClabRequest) -> dict:
         run_id = await start_lifecycle("deploy", str(yaml_path), [], _broadcast)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+    start_node_watch(run_id, safe_name, _broadcast)
 
     return {"run_id": run_id, "topology_file": str(yaml_path)}
 

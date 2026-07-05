@@ -7,6 +7,8 @@ import logging
 import uuid
 from typing import Any, Awaitable, Callable
 
+from collector.clab import stream_docker_events
+
 logger = logging.getLogger(__name__)
 
 # Ring buffer for log re-attachment (late WS joiners)
@@ -18,6 +20,35 @@ _active_task: asyncio.Task | None = None
 _active_run_id: str | None = None
 
 BroadcastFn = Callable[[str, dict[str, Any]], Awaitable[None]]
+
+# lab_name → background docker-events watch task (at most one per lab)
+_WATCH_TASKS: dict[str, asyncio.Task] = {}
+
+
+def start_node_watch(run_id: str, lab_name: str, broadcast: BroadcastFn) -> None:
+    """Start (or restart) a background task broadcasting node run/stop state for *lab_name*."""
+    stop_node_watch(lab_name)
+    _WATCH_TASKS[lab_name] = asyncio.create_task(
+        _watch_nodes(run_id, lab_name, broadcast),
+        name=f"clab:watch:{lab_name}",
+    )
+
+
+def stop_node_watch(lab_name: str) -> None:
+    """Cancel the background node-watch task for *lab_name*, if any."""
+    task = _WATCH_TASKS.pop(lab_name, None)
+    if task is not None and not task.done():
+        task.cancel()
+
+
+async def _watch_nodes(run_id: str, lab_name: str, broadcast: BroadcastFn) -> None:
+    try:
+        async for node_id, state in stream_docker_events(lab_name):
+            await broadcast(run_id, {"type": "node_state", "node_id": node_id, "state": state})
+    except asyncio.CancelledError:
+        pass
+    except Exception as exc:
+        logger.error("node watch error lab=%s: %s", lab_name, exc)
 
 
 def is_running() -> bool:

@@ -1,7 +1,9 @@
 """Lab lifecycle API — deploy / destroy / redeploy containerlab topologies."""
 
 import re
+from pathlib import Path
 
+import yaml
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
 
@@ -11,6 +13,8 @@ from collector.clab_lifecycle import (
     get_run_logs,
     is_running,
     start_lifecycle,
+    start_node_watch,
+    stop_node_watch,
 )
 from collector.telemetry_manager import telemetry_manager
 
@@ -40,6 +44,22 @@ async def _broadcast(run_id: str, payload: dict) -> None:
 def _busy_check() -> None:
     if is_running():
         raise HTTPException(status_code=409, detail=f"Lifecycle op in progress (run_id={active_run_id()})")
+
+
+def _lab_name_from_topo(topology_file: str) -> str:
+    try:
+        with open(topology_file) as f:
+            data = yaml.safe_load(f) or {}
+        name = data.get("name")
+        if name:
+            return str(name)
+    except (OSError, yaml.YAMLError):
+        pass
+    stem = Path(topology_file).name
+    for ext in (".clab.yml", ".clab.yaml"):
+        if stem.endswith(ext):
+            return stem[: -len(ext)]
+    return Path(topology_file).stem
 
 
 def _resolve_topo(path: str) -> str:
@@ -81,6 +101,7 @@ async def deploy(req: LifecycleRequest) -> dict:
         run_id = await start_lifecycle("deploy", topo, extra, _broadcast)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+    start_node_watch(run_id, _lab_name_from_topo(topo), _broadcast)
     return {"run_id": run_id}
 
 
@@ -94,6 +115,7 @@ async def destroy(req: LifecycleRequest) -> dict:
         run_id = await start_lifecycle("destroy", topo, extra, _broadcast)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+    stop_node_watch(_lab_name_from_topo(topo))
     return {"run_id": run_id}
 
 
@@ -110,6 +132,7 @@ async def redeploy(req: LifecycleRequest) -> dict:
         run_id = await start_lifecycle("deploy", topo, extra, _broadcast)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+    start_node_watch(run_id, _lab_name_from_topo(topo), _broadcast)
     return {"run_id": run_id}
 
 
