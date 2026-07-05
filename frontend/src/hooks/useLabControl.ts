@@ -7,7 +7,7 @@ const WS_BASE = import.meta.env.DEV
 
 export function useLabControl() {
   const wsRef = useRef<WebSocket | null>(null);
-  const { setStatus, setRunId, appendLog, clearLogs } = useLabStore.getState();
+  const { setStatus, setRunId, appendLog, clearLogs, clearNodeStates } = useLabStore.getState();
 
   const closeWS = useCallback(() => {
     wsRef.current?.close();
@@ -22,6 +22,8 @@ export function useLabControl() {
     ) => {
       closeWS();
       clearLogs();
+      clearNodeStates();
+      useLabStore.getState().setResultSummary(null);
 
       const labStatus: LabStatus =
         action === "deploy" ? "deploying" : action === "destroy" ? "destroying" : "redeploying";
@@ -57,11 +59,20 @@ export function useLabControl() {
             line?: string;
             code?: number;
             message?: string;
+            node_id?: string;
+            state?: "running" | "stopped";
           };
           if (msg.type === "log" && msg.line !== undefined) {
             appendLog(msg.line);
+          } else if (msg.type === "node_state" && msg.node_id && msg.state) {
+            useLabStore.getState().setNodeState(msg.node_id, msg.state);
           } else if (msg.type === "exit") {
-            setStatus(msg.code === 0 ? "done" : "error");
+            const ok = msg.code === 0;
+            setStatus(ok ? "done" : "error");
+            useLabStore.getState().setResultSummary({
+              ok,
+              message: ok ? "Completed successfully." : `Exited with code ${msg.code}.`,
+            });
             closeWS();
           } else if (msg.type === "error") {
             appendLog(`ERROR: ${msg.message ?? "unknown"}`);
@@ -78,7 +89,7 @@ export function useLabControl() {
         setStatus("error");
       };
     },
-    [closeWS, setStatus, setRunId, appendLog, clearLogs],
+    [closeWS, setStatus, setRunId, appendLog, clearLogs, clearNodeStates],
   );
 
   return {

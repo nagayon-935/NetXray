@@ -11,6 +11,7 @@ interface LabState {
   topologyFile: string;
   /** nodeId → runtime state from docker event stream */
   nodeStates: Record<string, RuntimeState>;
+  resultSummary: { ok: boolean; message: string } | null;
 
   setStatus: (s: LabStatus) => void;
   setRunId: (id: string | null) => void;
@@ -19,6 +20,7 @@ interface LabState {
   setTopologyFile: (f: string) => void;
   setNodeState: (nodeId: string, state: RuntimeState) => void;
   clearNodeStates: () => void;
+  setResultSummary: (s: { ok: boolean; message: string } | null) => void;
 }
 
 export const useLabStore = create<LabState>((set) => ({
@@ -27,6 +29,7 @@ export const useLabStore = create<LabState>((set) => ({
   logs: [],
   topologyFile: "",
   nodeStates: {},
+  resultSummary: null,
 
   setStatus: (status) => set({ status }),
   setRunId: (runId) => set({ runId }),
@@ -39,4 +42,5 @@ export const useLabStore = create<LabState>((set) => ({
   setNodeState: (nodeId, state) =>
     set((s) => ({ nodeStates: { ...s.nodeStates, [nodeId]: state } })),
   clearNodeStates: () => set({ nodeStates: {} }),
+  setResultSummary: (resultSummary) => set({ resultSummary }),
 }));

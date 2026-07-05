@@ -91,6 +91,24 @@ def _resolve_topo(path: str) -> str:
     return path
 
 
+@router.get("/topologies")
+async def list_topologies() -> dict:
+    """List discoverable containerlab topology files under clab_labs_dir."""
+    base = settings.clab_labs_dir
+    if not base.exists():
+        return {"topologies": []}
+    entries = []
+    for pattern in ("*.clab.yml", "*.clab.yaml"):
+        for p in sorted(base.glob(pattern)):
+            name = p.name
+            for ext in (".clab.yml", ".clab.yaml"):
+                if name.endswith(ext):
+                    name = name[: -len(ext)]
+                    break
+            entries.append({"name": name, "path": str(p)})
+    return {"topologies": entries}
+
+
 @router.post("/deploy")
 async def deploy(req: LifecycleRequest) -> dict:
     """Deploy a containerlab topology. Returns run_id; progress streams via WS."""

@@ -30,12 +30,21 @@ export function LabControlPanel() {
   const logs         = useLabStore((s) => s.logs);
   const topologyFile = useLabStore((s) => s.topologyFile);
   const setTopologyFile = useLabStore((s) => s.setTopologyFile);
+  const resultSummary = useLabStore((s) => s.resultSummary);
 
   const [cleanup, setCleanup] = useState(false);
   const [showLogs, setShowLogs] = useState(true);
+  const [availableLabs, setAvailableLabs] = useState<{ name: string; path: string }[]>([]);
   const logRef = useRef<HTMLPreElement>(null);
 
   const busy = status === "deploying" || status === "destroying" || status === "redeploying";
+
+  useEffect(() => {
+    fetch("/api/lab/topologies")
+      .then((r) => r.json())
+      .then((data: { topologies: { name: string; path: string }[] }) => setAvailableLabs(data.topologies))
+      .catch(() => setAvailableLabs([]));
+  }, []);
 
   // Auto-scroll log to bottom
   useEffect(() => {
@@ -51,14 +60,19 @@ export function LabControlPanel() {
         <label className="block text-[10px] text-slate-500 uppercase tracking-wide">
           Topology File (.clab.yml)
         </label>
-        <input
-          type="text"
+        <select
           value={topologyFile}
           onChange={(e) => setTopologyFile(e.target.value)}
-          placeholder="path/to/topology.clab.yml"
           disabled={busy}
           className="w-full text-xs font-mono px-2 py-1.5 border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-        />
+        >
+          <option value="">Select a lab…</option>
+          {availableLabs.map((lab) => (
+            <option key={lab.path} value={lab.path}>
+              {lab.name}
+            </option>
+          ))}
+        </select>
         <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
           <input
             type="checkbox"
@@ -105,6 +119,16 @@ export function LabControlPanel() {
           {showLogs ? "Hide logs" : "Show logs"}
         </button>
       </div>
+
+      {resultSummary && (
+        <div
+          className={`px-3 py-2 text-xs font-medium ${
+            resultSummary.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+          }`}
+        >
+          {resultSummary.message}
+        </div>
+      )}
 
       {/* Log viewer */}
       {showLogs && (

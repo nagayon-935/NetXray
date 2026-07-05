@@ -128,3 +128,16 @@ def test_clone_to_clab_rejects_unsupported_vendor():
     )
     assert resp.status_code == 400
     assert "cisco_xr" in resp.json()["detail"]
+
+
+def test_list_lab_topologies(tmp_path, monkeypatch):
+    import api.routes.lab as lab_module
+    monkeypatch.setattr(lab_module.settings, "clab_labs_dir", tmp_path)
+    (tmp_path / "spine-leaf.clab.yml").write_text("name: spine-leaf\n")
+    (tmp_path / "not-a-lab.txt").write_text("ignore me\n")
+
+    resp = client.get("/api/lab/topologies")
+
+    assert resp.status_code == 200
+    names = [t["name"] for t in resp.json()["topologies"]]
+    assert names == ["spine-leaf"]
