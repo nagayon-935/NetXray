@@ -17,6 +17,23 @@ interface NetworkEdgeData {
   isOnPath: boolean;
 }
 
+/**
+ * getBezierPath always places the label at the curve's exact midpoint, so
+ * two edges that cross each other symmetrically (e.g. a spine-leaf full
+ * mesh) get labels sitting on top of each other at the crossing point. A
+ * small deterministic per-edge offset (stable across re-renders, derived
+ * from the edge id) nudges them apart without needing real collision math.
+ */
+function labelOffset(id: string): { dx: number; dy: number } {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  }
+  const dx = ((Math.abs(hash) % 17) - 8) * 2;
+  const dy = ((Math.abs(hash >> 4) % 17) - 8) * 2;
+  return { dx, dy };
+}
+
 function NetworkEdgeComponent({
   id,
   source,
@@ -53,6 +70,7 @@ function NetworkEdgeComponent({
   const [edgePath] = result;
   const labelX = result[1] as number;
   const labelY = result[2] as number;
+  const { dx, dy } = labelOffset(id);
 
   let strokeColor: string = COLORS.NEUTRAL;
   if (isDown) strokeColor = COLORS.DOWN;
@@ -86,7 +104,7 @@ function NetworkEdgeComponent({
         <div
           className="absolute text-[10px] bg-white/90 px-1 rounded pointer-events-none"
           style={{
-            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+            transform: `translate(-50%, -50%) translate(${labelX + dx}px, ${labelY + dy}px)`,
           }}
         >
           <span className="text-slate-500">
