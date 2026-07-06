@@ -20,6 +20,38 @@ interface ElkNode {
   children: ElkNode[];
 }
 
+/**
+ * For small, cyclic (i.e. non-tree) topologies with no host/leaf/spine
+ * tiering — e.g. a fully-meshed 3-router triangle — ELK's layered algorithm
+ * has no natural DAG root and tends to spread every node into its own
+ * layer (a straight chain) rather than an apex-plus-base shape. Picking the
+ * highest-degree node as an explicit FIRST-layer apex fixes this. Trees
+ * (edges.length < nodes.length) already have an unambiguous root and are
+ * left alone.
+ */
+function pickApexNode(nodes: FlowNode[], edges: FlowEdge[]): string | null {
+  const realNodes = nodes.filter((n) => n.type !== "group");
+  if (realNodes.length < 3 || realNodes.length > 5) return null;
+  if (edges.length < realNodes.length) return null;
+
+  const degree = new Map<string, number>();
+  for (const e of edges) {
+    degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
+    degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
+  }
+
+  let apex: string | null = null;
+  let maxDegree = -1;
+  for (const n of realNodes) {
+    const d = degree.get(n.id) ?? 0;
+    if (d > maxDegree) {
+      maxDegree = d;
+      apex = n.id;
+    }
+  }
+  return apex;
+}
+
 type Tier = "spine" | "leaf" | "host";
 
 /**
@@ -87,6 +119,7 @@ function presetOptions(
         "elk.spacing.nodeNode": "80",
         "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
         "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
+        "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
         "elk.padding": `[top=${padding},left=${padding},bottom=${padding},right=${padding}]`,
       };
     case "layered":
@@ -123,8 +156,26 @@ export function useTopologyLayout() {
           ? classifyTiers(nodes, edges)
           : null;
 
+      // "auto" with no detected host/leaf/spine tiers falls back to a
+      // general config. ELK's layered (Sugiyama-style) algorithm always
+      // puts directly-connected nodes in different layers, so a small
+      // fully/near-fully connected mesh (e.g. a 3-router triangle) ends up
+      // spread across one layer per node — a straight chain, not a
+      // triangle. For that specific case, "force" (which settles mutually
+      // connected nodes into a naturally symmetric/rounded shape) is used
+      // instead. Larger or tree-like topologies keep the "layered" fallback.
+      const isAutoGeneralFallback = preset === "auto" && !tiers;
+      const apexId = isAutoGeneralFallback ? pickApexNode(nodes, edges) : null;
+      const useForceForMesh = isAutoGeneralFallback && apexId !== null;
+
       const effectivePreset: ConcretePreset =
-        preset === "auto" ? (tiers ? "spine-leaf" : "layered") : preset;
+        preset === "auto"
+          ? tiers
+            ? "spine-leaf"
+            : useForceForMesh
+            ? "force"
+            : "layered"
+          : preset;
 
       const elkNodeMap = new Map<string, ElkNode>();
 
@@ -141,7 +192,7 @@ export function useTopologyLayout() {
             `[top=${groupPad + 20},left=${groupPad},bottom=${groupPad},right=${groupPad}]`;
           layoutOptions["elk.algorithm"] = "layered";
           layoutOptions["elk.direction"] =
-            effectivePreset === "layered" ? "RIGHT" : "DOWN";
+            effectivePreset === "layered" && !isAutoGeneralFallback ? "RIGHT" : "DOWN";
           layoutOptions["elk.spacing.nodeNode"] = "40";
         } else if (tiers && effectivePreset === "spine-leaf") {
           const role = tiers.get(node.id);
@@ -174,9 +225,17 @@ export function useTopologyLayout() {
         }
       });
 
+      const baseOptions = presetOptions(effectivePreset, nodes.length);
       const elkGraph = {
         id: "root",
-        layoutOptions: presetOptions(effectivePreset, nodes.length),
+        layoutOptions: isAutoGeneralFallback && effectivePreset === "layered"
+          ? {
+              ...baseOptions,
+              "elk.direction": "DOWN",
+              "elk.layered.spacing.nodeNodeBetweenLayers": "160",
+              "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
+            }
+          : baseOptions,
         children: rootChildren,
         edges: edges.map((edge) => ({
           id: edge.id,
@@ -187,10 +246,9 @@ export function useTopologyLayout() {
 
       const layouted = await elk.layout(elkGraph);
 
-      const targetPosition =
-        effectivePreset === "layered" ? Position.Left : Position.Top;
-      const sourcePosition =
-        effectivePreset === "layered" ? Position.Right : Position.Bottom;
+      const usesRightDirection = effectivePreset === "layered" && !isAutoGeneralFallback;
+      const targetPosition = usesRightDirection ? Position.Left : Position.Top;
+      const sourcePosition = usesRightDirection ? Position.Right : Position.Bottom;
 
       const positionMap = new Map<
         string,
