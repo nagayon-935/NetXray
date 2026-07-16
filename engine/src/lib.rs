@@ -264,3 +264,120 @@ fn json_to_jsvalue<T: Serialize>(val: T) -> Result<JsValue, JsValue> {
     Ok(JsValue::from_str(&s))
 }
 
+// ---------------------------------------------------------------------------
+// Native tests for the simulation core (no wasm runtime needed)
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn state_from_json(ir_json: &str) -> EngineState {
+        let ir: NetXrayIR = serde_json::from_str(ir_json).expect("fixture IR must parse");
+        let graph = TopologyGraph::build(&ir);
+        EngineState { ir, graph }
+    }
+
+    fn header(src_ip: &str, dst_ip: &str) -> JsPacketHeader {
+        JsPacketHeader {
+            src_ip: src_ip.into(),
+            dst_ip: dst_ip.into(),
+            protocol: "icmp".into(),
+            src_port: None,
+            dst_port: None,
+        }
+    }
+
+    fn linear_ir(with_deny_acl: bool, second_link_state: &str) -> String {
+        let acl_in = if with_deny_acl { r#""acl_in": "BLOCK","# } else { "" };
+        format!(
+            r#"{{
+              "ir_version": "0.1.0",
+              "topology": {{
+                "nodes": [
+                  {{"id": "r1", "type": "router",
+                    "interfaces": {{"eth0": {{"ip": "10.0.0.1/30"}}}}}},
+                  {{"id": "r2", "type": "router",
+                    "interfaces": {{"eth0": {{"ip": "10.0.0.2/30"}},
+                                    "eth1": {{"ip": "10.0.1.1/30"}}}}}},
+                  {{"id": "r3", "type": "router",
+                    "interfaces": {{"eth0": {{{acl_in} "ip": "10.0.1.2/30"}}}}}}
+                ],
+                "links": [
+                  {{"id": "l1",
+                    "source": {{"node": "r1", "interface": "eth0"}},
+                    "target": {{"node": "r2", "interface": "eth0"}}}},
+                  {{"id": "l2", "state": "{second_link_state}",
+                    "source": {{"node": "r2", "interface": "eth1"}},
+                    "target": {{"node": "r3", "interface": "eth0"}}}}
+                ]
+              }},
+              "policies": {{
+                "acls": {{
+                  "BLOCK": [
+                    {{"seq": 10, "action": "deny", "protocol": "any",
+                      "src": "any", "dst": "any"}}
+                  ]
+                }}
+              }}
+            }}"#
+        )
+    }
+
+    #[test]
+    fn simulation_delivers_across_linear_topology() {
+        let state = state_from_json(&linear_ir(false, "up"));
+
+        let path = run_simulation(&state, &header("10.0.0.1", "10.0.1.2")).unwrap();
+
+        assert_eq!(path.result, "delivered");
+        assert!(path.drop_reason.is_none());
+        let ids: Vec<&str> = path.hops.iter().map(|h| h.node_id.as_str()).collect();
+        assert_eq!(ids, ["r1", "r2", "r3"]);
+        assert_eq!(path.hops[0].ingress_interface, None);
+        assert_eq!(path.hops[0].egress_interface.as_deref(), Some("eth0"));
+        assert_eq!(path.hops[1].ingress_interface.as_deref(), Some("eth0"));
+        assert_eq!(path.hops[1].egress_interface.as_deref(), Some("eth1"));
+        assert_eq!(path.hops[2].ingress_interface.as_deref(), Some("eth0"));
+        assert_eq!(path.hops[2].egress_interface, None);
+    }
+
+    #[test]
+    fn simulation_reports_unreachable_when_no_path() {
+        let state = state_from_json(&linear_ir(false, "down"));
+
+        let path = run_simulation(&state, &header("10.0.0.1", "10.0.1.2")).unwrap();
+
+        assert_eq!(path.result, "unreachable");
+        assert!(path.hops.is_empty());
+        assert_eq!(path.drop_reason.as_deref(), Some("No route to destination"));
+    }
+
+    #[test]
+    fn simulation_drops_on_ingress_deny_acl() {
+        let state = state_from_json(&linear_ir(true, "up"));
+
+        let path = run_simulation(&state, &header("10.0.0.1", "10.0.1.2")).unwrap();
+
+        assert_eq!(path.result, "dropped");
+        let reason = path.drop_reason.expect("dropped path must carry a reason");
+        assert!(reason.contains("BLOCK"), "reason should name the ACL: {reason}");
+        let last = path.hops.last().expect("denying hop must be recorded");
+        assert_eq!(last.node_id, "r3");
+        let acl = last.acl_result.as_ref().expect("denying hop carries acl_result");
+        assert_eq!(acl.acl_name, "BLOCK");
+        assert_eq!(acl.action, "deny");
+        assert_eq!(acl.matched_seq, Some(10));
+    }
+
+    #[test]
+    fn simulation_errors_on_unknown_source_ip() {
+        let state = state_from_json(&linear_ir(false, "up"));
+
+        let err = run_simulation(&state, &header("192.0.2.99", "10.0.1.2")).unwrap_err();
+
+        assert!(err.contains("192.0.2.99"), "error should name the IP: {err}");
+        assert!(err.contains("not found"));
+    }
+}
+
