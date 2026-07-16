@@ -66,9 +66,9 @@ uv run uvicorn api.main:app --reload --port 8000
 環境変数で接続先を設定:
 
 ```bash
-export NETXRAY_CLAB_SSH_USER=admin
-export NETXRAY_CLAB_SSH_PASSWORD=admin
-export NETXRAY_DATA_DIR=/path/to/topologies
+export CLAB_SSH_USER=admin
+export CLAB_SSH_PASSWORD=admin
+export DATA_DIR=/path/to/topologies
 ```
 
 詳細は [`backend/README.md`](backend/README.md) を参照。
@@ -88,7 +88,7 @@ docker run -d -p 8000:8000 --name netxray netxray:latest
 ```
 
 - コンテナ内では FastAPI (backend) が 8000 ポートで動作し、ビルド済みのフロントエンド資産を静的ファイルとして配信します。
-- 必要に応じて環境変数（`NETXRAY_CLAB_SSH_USER` 等）を `-e` オプションで渡してください。
+- 必要に応じて環境変数（`CLAB_SSH_USER` 等）を `-e` オプションで渡してください。
 
 ## 主な機能
 
@@ -120,11 +120,6 @@ docker run -d -p 8000:8000 --name netxray netxray:latest
 
 - src / dst / プロトコル / ポートを指定してパス追跡
 - エッジアニメーションでフロー方向を可視化
-
-### スナップショット
-
-- 任意タイミングで IR 状態を保存（最大 20 件）
-- スナップショット間の diff 表示（ノード増減・リンク状態変化）
 
 ## 技術スタック
 

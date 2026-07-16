@@ -16,9 +16,10 @@ uv run uvicorn api.main:app --reload --port 8000
 
 | 変数名 | デフォルト | 説明 |
 |---|---|---|
-| `NETXRAY_DATA_DIR` | `./data/topologies` | IR JSON の保存ディレクトリ |
-| `NETXRAY_CLAB_SSH_USER` | `""` | SSH ユーザー名（未設定時は起動警告） |
-| `NETXRAY_CLAB_SSH_PASSWORD` | `""` | SSH パスワード（未設定時は起動警告） |
+| `DATA_DIR` | `./data/topologies` | IR JSON の保存ディレクトリ |
+| `CLAB_SSH_USER` | `""` | SSH ユーザー名（未設定時は起動警告） |
+| `CLAB_SSH_PASSWORD` | `""` | SSH パスワード（未設定時は起動警告） |
+| `NETXRAY_CLAB_LABS_DIR` | `/labs` | containerlab トポロジのベースディレクトリ（`binds:` の一貫性のためホストと同一パスにする） |
 
 ## API エンドポイント
 
