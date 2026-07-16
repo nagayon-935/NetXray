@@ -7,7 +7,6 @@
 
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import type { NetXrayIR } from "../../types/netxray-ir";
-import type { PacketPath } from "../../engine/types";
 import type { ViewDef, ViewResult } from "./index";
 import { COLORS } from "../colors";
 
@@ -23,7 +22,7 @@ function asColor(idx: number) {
   return AS_COLORS[idx % AS_COLORS.length];
 }
 
-function derive(ir: NetXrayIR, _packetPath?: PacketPath | null): ViewResult {
+function derive(ir: NetXrayIR): ViewResult {
   const nodes: FlowNode[] = [];
   const edges: FlowEdge[] = [];
 

@@ -1,10 +1,9 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
+import type { Node as FlowNode } from "@xyflow/react";
 import type { NetXrayIR, Node, Link } from "../types/netxray-ir";
 import type { PacketPath, ShadowedRule } from "../engine/types";
 import { getEngine } from "../engine/wasm-engine";
-import { COLORS } from "../lib/colors";
 
 export type EngineStatus = "loading" | "wasm" | "mock";
 
@@ -12,8 +11,6 @@ export type PanelId = "detail" | "link-detail" | "acl" | "packet" | "lab" | "edi
 
 export interface TopologyState {
   ir: NetXrayIR | null;
-  flowNodes: FlowNode[];
-  flowEdges: FlowEdge[];
   nodePositions: Record<string, { x: number; y: number; width?: number; height?: number }>;
   selectedNodeId: string | null;
   selectedLinkId: string | null;
@@ -43,7 +40,6 @@ export interface TopologyState {
   setDockWidth: (width: number) => void;
   toggleDockCollapsed: () => void;
   toggleLinkState: (linkId: string) => void;
-  updateFlowElements: () => void;
   setEngineStatus: (status: "wasm" | "mock") => void;
   updateNodePositions: (nodes: FlowNode[]) => void;
   updateInterface: (
@@ -76,41 +72,6 @@ export interface TopologyState {
   exportIR: () => string;
 }
 
-function irNodeToFlowNode(node: Node): FlowNode {
-  return {
-    id: node.id,
-    type: node.type === "host" ? "host" : node.type === "switch" ? "switch" : "router",
-    position: { x: 0, y: 0 },
-    data: { ...node },
-  };
-}
-
-function irLinkToFlowEdge(link: Link, packetPath: PacketPath | null): FlowEdge {
-  const isOnPath = packetPath?.hops.some((hop, i) => {
-    if (i === 0) return false;
-    const prevHop = packetPath.hops[i - 1];
-    return (
-      (prevHop.node_id === link.source.node && hop.node_id === link.target.node) ||
-      (prevHop.node_id === link.target.node && hop.node_id === link.source.node)
-    );
-  });
-
-  return {
-    id: link.id,
-    source: link.source.node,
-    target: link.target.node,
-    type: "network",
-    animated: false,
-    data: {
-      state: link.state,
-      sourceInterface: link.source.interface,
-      targetInterface: link.target.interface,
-      isOnPath,
-    },
-    style: link.state === "down" ? { stroke: COLORS.DOWN, strokeDasharray: "5,5" } : undefined,
-  };
-}
-
 function makeId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -130,8 +91,6 @@ export const useTopologyStore = create<TopologyState>()(
 
   return {
   ir: null,
-  flowNodes: [],
-  flowEdges: [],
   nodePositions: {},
   selectedNodeId: null,
   selectedLinkId: null,
@@ -149,14 +108,12 @@ export const useTopologyStore = create<TopologyState>()(
 
   loadIR: (ir) => {
     getEngine().loadTopology(ir);
-    const flowNodes = ir.topology.nodes.map(irNodeToFlowNode);
-    const flowEdges = ir.topology.links.map((l) => irLinkToFlowEdge(l, null));
     const savedPositions = ir.meta?.positions ?? {};
     const nodePositions: TopologyState["nodePositions"] = {};
     for (const [id, pos] of Object.entries(savedPositions)) {
       nodePositions[id] = { x: pos.x, y: pos.y };
     }
-    set({ ir, flowNodes, flowEdges, nodePositions, packetPath: null, shadowedRules: {}, past: [], future: [] });
+    set({ ir, nodePositions, packetPath: null, shadowedRules: {}, past: [], future: [] });
   },
 
   selectNode: (nodeId) => {
@@ -181,10 +138,9 @@ export const useTopologyStore = create<TopologyState>()(
     if (aclName) get().openPanel("acl");
   },
 
-  setPacketPath: (path) => {
-    set({ packetPath: path });
-    get().updateFlowElements();
-  },
+  // Views derive their edges from (ir, packetPath) in TopologyCanvas, so a
+  // single set() here is all that is needed to repaint the path highlight.
+  setPacketPath: (path) => set({ packetPath: path }),
 
   setShadowedRules: (aclName, rules) => {
     set((state) => ({
@@ -235,15 +191,6 @@ export const useTopologyStore = create<TopologyState>()(
     );
     const updatedIR = { ...ir, topology: { ...ir.topology, links: updatedLinks } };
     commitIR(updatedIR);
-    get().updateFlowElements();
-  },
-
-  updateFlowElements: () => {
-    const { ir, packetPath } = get();
-    if (!ir) return;
-    set({
-      flowEdges: ir.topology.links.map((l) => irLinkToFlowEdge(l, packetPath)),
-    });
   },
 
   setEngineStatus: (status) => set({ engineStatus: status }),
@@ -479,8 +426,6 @@ export const useTopologyStore = create<TopologyState>()(
     getEngine().loadTopology(emptyIR);
     set({
       ir: emptyIR,
-      flowNodes: [],
-      flowEdges: [],
       nodePositions: {},
       packetPath: null,
       shadowedRules: {},
