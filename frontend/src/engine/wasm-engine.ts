@@ -10,9 +10,9 @@ import { mockEngine } from "./mock-engine";
 
 type WasmModule = {
   load_topology(ir_json: string): void;
-  simulate_packet(packet_json: string): string;
-  detect_acl_shadows(acl_name: string): string;
-  evaluate_acl_named(acl_name: string, packet_json: string): string;
+  simulate_packet(packet: PacketHeader): PacketPath;
+  detect_acl_shadows(acl_name: string): ShadowedRule[];
+  evaluate_acl_named(acl_name: string, packet: PacketHeader): AclEvaluation;
 };
 
 let wasmMod: WasmModule | null = null;
@@ -57,8 +57,9 @@ class WasmEngine implements SimEngine {
 
   simulatePacket(packet: PacketHeader): PacketPath {
     if (!wasmMod) throw new Error("WASM not initialized");
-    const raw = wasmMod.simulate_packet(JSON.stringify(packet));
-    const result = JSON.parse(raw) as PacketPath;
+    // The engine returns a plain JS object directly (serde-wasm-bindgen);
+    // no JSON string round-trip on either side of the boundary.
+    const result = wasmMod.simulate_packet(packet);
     return {
       ...result,
       hops: result.hops.map((hop) => ({
@@ -72,13 +73,11 @@ class WasmEngine implements SimEngine {
 
   detectAclShadows(aclName: string): ShadowedRule[] {
     if (!wasmMod) throw new Error("WASM not initialized");
-    return JSON.parse(wasmMod.detect_acl_shadows(aclName)) as ShadowedRule[];
+    return wasmMod.detect_acl_shadows(aclName);
   }
 
   evaluateAcl(aclName: string, packet: PacketHeader): AclEvaluation {
     if (!wasmMod) throw new Error("WASM not initialized");
-    return JSON.parse(
-      wasmMod.evaluate_acl_named(aclName, JSON.stringify(packet))
-    ) as AclEvaluation;
+    return wasmMod.evaluate_acl_named(aclName, packet);
   }
 }
