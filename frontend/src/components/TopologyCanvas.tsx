@@ -135,13 +135,15 @@ export function TopologyCanvas() {
 
   const activeViewId = useViewStore((s) => s.activeView);
   const activeView = VIEW_REGISTRY[activeViewId];
-  const { layers } = useLayerStore();
+  // Narrow subscription: only the path overlay affects the canvas derivation;
+  // toggling other layers (labels) must not re-render the whole canvas.
+  const pathLayerOn = useLayerStore((s) => s.layers.path);
 
+  const activePath = pathLayerOn ? packetPath : null;
   const viewResult = useMemo<ViewResult>(() => {
     if (!ir) return { nodes: [], edges: [] };
-    const activePath = layers.path ? packetPath : null;
     return activeView.derive(ir, activePath);
-  }, [ir, activeView, packetPath, layers.path]);
+  }, [ir, activeView, activePath]);
 
   const styledNodes = viewResult.nodes;
   const styledEdges = viewResult.edges;
