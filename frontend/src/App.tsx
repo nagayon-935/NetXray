@@ -1,4 +1,5 @@
 import { TopologyCanvas } from "./components/TopologyCanvas";
+import { Toaster } from "./components/Toaster";
 import { useWasmEngine } from "./hooks/useWasmEngine";
 import "./index.css";
 
@@ -8,6 +9,7 @@ function App() {
   return (
     <div className="w-full h-full">
       <TopologyCanvas />
+      <Toaster />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import os
 import subprocess
 from dataclasses import dataclass
 from typing import AsyncGenerator, Any
@@ -213,9 +214,90 @@ def exec_node(node_name: str, commands: list[str]) -> dict[str, str]:
             results[cmd_str] = f"ERROR: {exc}"
     return results
 
+def get_topo_file_from_container(container_name: str) -> str | None:
+    """Read the `clab-topo-file` Docker label from a container.
+
+    Containerlab stamps every node container with the absolute path of the
+    originating .clab.yml. That path is the ground truth even when the user
+    only knows the lab name, so this is how we recover the yaml location
+    after inspect_lab() has identified running nodes.
+
+    Returns an absolute path that is readable from the current process, or
+    None on any failure (missing container, no label, path unreadable).
+    """
+    if not container_name:
+        return None
+    try:
+        result = subprocess.run(
+            [
+                "docker",
+                "inspect",
+                "-f",
+                '{{index .Config.Labels "clab-topo-file"}}',
+                container_name,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+    except FileNotFoundError:
+        logger.warning("docker binary not found — cannot auto-detect topo file")
+        return None
+    except subprocess.TimeoutExpired:
+        logger.warning("docker inspect timed out for %s", container_name)
+        return None
+    except subprocess.CalledProcessError as exc:
+        logger.debug("docker inspect failed for %s: %s", container_name, exc.stderr)
+        return None
+
+    path = result.stdout.strip()
+    if not path:
+        return None
+    if not os.path.isfile(path):
+        logger.warning(
+            "clab-topo-file label points to %s but it is not readable from this process",
+            path,
+        )
+        return None
+    return path
+
+
+def get_graph_positions_from_topo(topology_file: str) -> dict[str, dict[str, float]]:
+    """Parse graph-posX / graph-posY labels from .clab.yml and return {node_name: {x, y}}.
+
+    Containerlab uses these labels for its own `clab graph` renderer. We reuse
+    them so NetXray can restore the same spatial layout the topology author
+    intended without running an auto-layout algorithm.
+    """
+    if not topology_file or not os.path.isfile(topology_file):
+        return {}
+
+    try:
+        with open(topology_file, "r") as f:
+            topo = yaml.safe_load(f)
+    except Exception as e:
+        logger.warning("Failed to parse topo file for graph positions: %s", e)
+        return {}
+
+    positions: dict[str, dict[str, float]] = {}
+    nodes_raw = topo.get("topology", {}).get("nodes", {}) or {}
+    for node_name, node_cfg in nodes_raw.items():
+        if not isinstance(node_cfg, dict):
+            continue
+        labels = node_cfg.get("labels") or {}
+        try:
+            x = float(labels["graph-posX"])
+            y = float(labels["graph-posY"])
+            positions[node_name] = {"x": x, "y": y}
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    return positions
+
+
 def get_links_from_topo(topology_file: str) -> list[ClabLink]:
     """Parse .clab.yml and return list of links (endpoints)."""
-    import os
     if not topology_file or not os.path.isfile(topology_file):
         return []
 

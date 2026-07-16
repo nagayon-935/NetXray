@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTopologyStore } from "../../stores/topology-store";
 import { useImpairmentStore, type ImpairmentSpec } from "../../stores/impairment-store";
-import { PanelFrame } from "./shared/PanelFrame";
 import type { Node, Link, Interface } from "../../types/netxray-ir";
 
 export function LinkDetailPanel() {
@@ -9,7 +8,6 @@ export function LinkDetailPanel() {
   const selectedLinkId = useTopologyStore((s) => s.selectedLinkId);
   const toggleLinkState = useTopologyStore((s) => s.toggleLinkState);
   const updateInterface = useTopologyStore((s) => s.updateInterface);
-  const closePanel = () => useTopologyStore.getState().setActivePanel(null);
 
   if (!ir || !selectedLinkId) return null;
 
@@ -23,8 +21,8 @@ export function LinkDetailPanel() {
   const targetIface = targetNode?.interfaces?.[link.target.interface];
 
   return (
-    <PanelFrame title="Link Details" onClose={closePanel}>
-      <div className="text-[10px] text-slate-400 font-mono -mt-2">{link.id}</div>
+    <>
+      <div className="text-[10px] text-slate-400 font-mono">{link.id}</div>
       <div className="p-3 border-b border-slate-100 flex items-center justify-between">
         <span className="text-xs text-slate-500 font-medium">Link State</span>
         <button
@@ -78,7 +76,7 @@ export function LinkDetailPanel() {
       </div>
 
       <ImpairmentSection link={link} />
-    </PanelFrame>
+    </>
   );
 }
 

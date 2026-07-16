@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import type { NetXrayIR, Node, Link } from "../types/netxray-ir";
 import type { PacketPath, ShadowedRule } from "../engine/types";
@@ -7,14 +8,7 @@ import { COLORS } from "../lib/colors";
 
 export type EngineStatus = "loading" | "wasm" | "mock";
 
-export type ActivePanel =
-  | "detail"
-  | "link-detail"
-  | "acl"
-  | "packet"
-  | "lab"
-  | "edit"
-  | null;
+export type PanelId = "detail" | "link-detail" | "acl" | "packet" | "lab" | "edit";
 
 export interface TopologyState {
   ir: NetXrayIR | null;
@@ -26,9 +20,16 @@ export interface TopologyState {
   selectedAclName: string | null;
   packetPath: PacketPath | null;
   shadowedRules: Record<string, ShadowedRule[]>;
-  activePanel: ActivePanel;
+  // Panel dock: multiple panels can stay open as tabs; activeTab is the one in front.
+  openTabs: PanelId[];
+  activeTab: PanelId | null;
+  dockWidth: number;
+  dockCollapsed: boolean;
   engineStatus: EngineStatus;
   editMode: boolean;
+  // Undo/redo history of IR snapshots (not persisted)
+  past: NetXrayIR[];
+  future: NetXrayIR[];
 
   loadIR: (ir: NetXrayIR) => void;
   selectNode: (nodeId: string | null) => void;
@@ -36,7 +37,11 @@ export interface TopologyState {
   selectAcl: (aclName: string | null) => void;
   setPacketPath: (path: PacketPath | null) => void;
   setShadowedRules: (aclName: string, rules: ShadowedRule[]) => void;
-  setActivePanel: (panel: ActivePanel) => void;
+  openPanel: (panel: PanelId) => void;
+  closePanelTab: (panel: PanelId) => void;
+  toggleTab: (panel: PanelId) => void;
+  setDockWidth: (width: number) => void;
+  toggleDockCollapsed: () => void;
   toggleLinkState: (linkId: string) => void;
   updateFlowElements: () => void;
   setEngineStatus: (status: "wasm" | "mock") => void;
@@ -58,7 +63,11 @@ export interface TopologyState {
     targetNode: string,
     targetInterface: string
   ) => void;
+  /** Connect two nodes, auto-allocating a free (or new) interface on each. */
+  connectNodes: (sourceNodeId: string, targetNodeId: string) => void;
   deleteLink: (linkId: string) => void;
+  undo: () => void;
+  redo: () => void;
   saveIR: (name: string) => Promise<void>;
   applyToClab: (topoName: string) => Promise<string>;
 
@@ -106,7 +115,20 @@ function makeId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
-export const useTopologyStore = create<TopologyState>((set, get) => ({
+const HISTORY_LIMIT = 50;
+
+export const useTopologyStore = create<TopologyState>()(
+  persist(
+    (set, get) => {
+  // Apply an IR mutation while recording the previous IR for undo.
+  const commitIR = (nextIR: NetXrayIR, extra?: Partial<TopologyState>) => {
+    const { ir, past } = get();
+    const nextPast = ir ? [...past, ir].slice(-HISTORY_LIMIT) : past;
+    getEngine().loadTopology(nextIR);
+    set({ ir: nextIR, past: nextPast, future: [], ...extra });
+  };
+
+  return {
   ir: null,
   flowNodes: [],
   flowEdges: [],
@@ -116,9 +138,14 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
   selectedAclName: null,
   packetPath: null,
   shadowedRules: {},
-  activePanel: null,
+  openTabs: [],
+  activeTab: null,
+  dockWidth: 360,
+  dockCollapsed: false,
   engineStatus: "loading",
   editMode: false,
+  past: [],
+  future: [],
 
   loadIR: (ir) => {
     getEngine().loadTopology(ir);
@@ -129,33 +156,29 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
     for (const [id, pos] of Object.entries(savedPositions)) {
       nodePositions[id] = { x: pos.x, y: pos.y };
     }
-    set({ ir, flowNodes, flowEdges, nodePositions, packetPath: null, shadowedRules: {} });
+    set({ ir, flowNodes, flowEdges, nodePositions, packetPath: null, shadowedRules: {}, past: [], future: [] });
   },
 
   selectNode: (nodeId) => {
     const { editMode } = get();
-    set((s) => ({
-      selectedNodeId: nodeId,
-      selectedLinkId: null,
-      activePanel: nodeId
-        ? (editMode ? "edit" : "detail")
-        : (s.activePanel === "detail" || s.activePanel === "edit" ? null : s.activePanel),
-    }));
+    set({ selectedNodeId: nodeId, selectedLinkId: null });
+    if (nodeId) {
+      get().openPanel(editMode ? "edit" : "detail");
+    } else {
+      get().closePanelTab("detail");
+      get().closePanelTab("edit");
+    }
   },
 
   selectLink: (linkId) => {
-    set((s) => ({
-      selectedLinkId: linkId,
-      selectedNodeId: null,
-      activePanel: linkId ? "link-detail" : (s.activePanel === "link-detail" ? null : s.activePanel),
-    }));
+    set({ selectedLinkId: linkId, selectedNodeId: null });
+    if (linkId) get().openPanel("link-detail");
+    else get().closePanelTab("link-detail");
   },
 
   selectAcl: (aclName) => {
-    set((s) => ({
-      selectedAclName: aclName,
-      activePanel: aclName ? "acl" : (s.activePanel === "acl" ? null : s.activePanel),
-    }));
+    set({ selectedAclName: aclName });
+    if (aclName) get().openPanel("acl");
   },
 
   setPacketPath: (path) => {
@@ -169,7 +192,37 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
     }));
   },
 
-  setActivePanel: (panel) => set({ activePanel: panel }),
+  openPanel: (panel) => {
+    const { openTabs } = get();
+    set({
+      openTabs: openTabs.includes(panel) ? openTabs : [...openTabs, panel],
+      activeTab: panel,
+      dockCollapsed: false,
+    });
+  },
+
+  closePanelTab: (panel) => {
+    const { openTabs, activeTab } = get();
+    if (!openTabs.includes(panel)) return;
+    const nextTabs = openTabs.filter((p) => p !== panel);
+    set({
+      openTabs: nextTabs,
+      activeTab: activeTab === panel ? nextTabs[nextTabs.length - 1] ?? null : activeTab,
+    });
+  },
+
+  toggleTab: (panel) => {
+    const { openTabs, activeTab } = get();
+    if (openTabs.includes(panel) && activeTab === panel) {
+      get().closePanelTab(panel);
+    } else {
+      get().openPanel(panel);
+    }
+  },
+
+  setDockWidth: (width) => set({ dockWidth: width }),
+
+  toggleDockCollapsed: () => set((s) => ({ dockCollapsed: !s.dockCollapsed })),
 
   toggleLinkState: (linkId) => {
     const { ir } = get();
@@ -181,8 +234,7 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
         : link
     );
     const updatedIR = { ...ir, topology: { ...ir.topology, links: updatedLinks } };
-    getEngine().loadTopology(updatedIR);
-    set({ ir: updatedIR });
+    commitIR(updatedIR);
     get().updateFlowElements();
   },
 
@@ -212,8 +264,7 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
       };
     });
     const updatedIR = { ...ir, topology: { ...ir.topology, nodes: updatedNodes } };
-    getEngine().loadTopology(updatedIR);
-    set({ ir: updatedIR });
+    commitIR(updatedIR);
   },
 
   updateNodePositions: (nodes) => {
@@ -234,11 +285,7 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
 
   setEditMode: (on) => {
     set({ editMode: on });
-    if (!on) {
-      // Leaving edit mode: close edit panel
-      const { activePanel } = get();
-      if (activePanel === "edit") set({ activePanel: null });
-    }
+    if (!on) get().closePanelTab("edit");
   },
 
   addNode: (type, position) => {
@@ -260,8 +307,9 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
           topology: { nodes: [newNode], links: [] },
         };
 
-    getEngine().loadTopology(updatedIR);
-    set({ ir: updatedIR, nodePositions: { ...get().nodePositions, [id]: { x: position.x, y: position.y } } });
+    commitIR(updatedIR, {
+      nodePositions: { ...get().nodePositions, [id]: { x: position.x, y: position.y } },
+    });
     return id;
   },
 
@@ -273,11 +321,12 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
       (l) => l.source.node !== nodeId && l.target.node !== nodeId
     );
     const updatedIR = { ...ir, topology: { nodes: updatedNodes, links: updatedLinks } };
-    getEngine().loadTopology(updatedIR);
     const { nodePositions } = get();
     const nextPos = { ...nodePositions };
     delete nextPos[nodeId];
-    set({ ir: updatedIR, nodePositions: nextPos, selectedNodeId: null, activePanel: null });
+    commitIR(updatedIR, { nodePositions: nextPos, selectedNodeId: null });
+    get().closePanelTab("detail");
+    get().closePanelTab("edit");
   },
 
   updateNode: (nodeId, patch) => {
@@ -287,8 +336,7 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
       n.id === nodeId ? { ...n, ...patch } : n
     );
     const updatedIR = { ...ir, topology: { ...ir.topology, nodes: updatedNodes } };
-    getEngine().loadTopology(updatedIR);
-    set({ ir: updatedIR });
+    commitIR(updatedIR);
   },
 
   addLink: (sourceNode, sourceInterface, targetNode, targetInterface) => {
@@ -305,8 +353,62 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
       ...ir,
       topology: { ...ir.topology, links: [...ir.topology.links, newLink] },
     };
-    getEngine().loadTopology(updatedIR);
-    set({ ir: updatedIR });
+    commitIR(updatedIR);
+  },
+
+  connectNodes: (sourceNodeId, targetNodeId) => {
+    const { ir } = get();
+    if (!ir) return;
+    const src = ir.topology.nodes.find((n) => n.id === sourceNodeId);
+    const tgt = ir.topology.nodes.find((n) => n.id === targetNodeId);
+    if (!src || !tgt) return;
+
+    // Interfaces already consumed by an existing link, per node.
+    const usedByNode = (nodeId: string): Set<string> => {
+      const used = new Set<string>();
+      for (const l of ir.topology.links) {
+        if (l.source.node === nodeId) used.add(l.source.interface);
+        if (l.target.node === nodeId) used.add(l.target.interface);
+      }
+      return used;
+    };
+
+    // Pick a free existing interface, else generate the next free ethN.
+    const allocIface = (node: Node): { name: string; isNew: boolean } => {
+      const ifaces = node.interfaces ?? {};
+      const used = usedByNode(node.id);
+      const free = Object.keys(ifaces).find((name) => !used.has(name));
+      if (free) return { name: free, isNew: false };
+      let i = 0;
+      while (ifaces[`eth${i}`]) i++;
+      return { name: `eth${i}`, isNew: true };
+    };
+
+    const srcAlloc = allocIface(src);
+    const tgtAlloc = allocIface(tgt);
+
+    // Materialize any newly-generated interfaces on their nodes.
+    const updatedNodes = ir.topology.nodes.map((n) => {
+      if (n.id === src.id && srcAlloc.isNew) {
+        return { ...n, interfaces: { ...(n.interfaces ?? {}), [srcAlloc.name]: { state: "up" as const } } };
+      }
+      if (n.id === tgt.id && tgtAlloc.isNew) {
+        return { ...n, interfaces: { ...(n.interfaces ?? {}), [tgtAlloc.name]: { state: "up" as const } } };
+      }
+      return n;
+    });
+
+    const newLink: Link = {
+      id: makeId("link"),
+      source: { node: src.id, interface: srcAlloc.name },
+      target: { node: tgt.id, interface: tgtAlloc.name },
+      state: "up",
+    };
+    const updatedIR = {
+      ...ir,
+      topology: { nodes: updatedNodes, links: [...ir.topology.links, newLink] },
+    };
+    commitIR(updatedIR);
   },
 
   deleteLink: (linkId) => {
@@ -314,8 +416,36 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
     if (!ir) return;
     const updatedLinks = ir.topology.links.filter((l) => l.id !== linkId);
     const updatedIR = { ...ir, topology: { ...ir.topology, links: updatedLinks } };
-    getEngine().loadTopology(updatedIR);
-    set({ ir: updatedIR, selectedLinkId: null, activePanel: null });
+    commitIR(updatedIR, { selectedLinkId: null });
+    get().closePanelTab("link-detail");
+  },
+
+  undo: () => {
+    const { past, future, ir } = get();
+    if (past.length === 0) return;
+    const previous = past[past.length - 1];
+    getEngine().loadTopology(previous);
+    set({
+      ir: previous,
+      past: past.slice(0, -1),
+      future: ir ? [ir, ...future].slice(0, HISTORY_LIMIT) : future,
+      selectedNodeId: null,
+      selectedLinkId: null,
+    });
+  },
+
+  redo: () => {
+    const { past, future, ir } = get();
+    if (future.length === 0) return;
+    const next = future[0];
+    getEngine().loadTopology(next);
+    set({
+      ir: next,
+      past: ir ? [...past, ir].slice(-HISTORY_LIMIT) : past,
+      future: future.slice(1),
+      selectedNodeId: null,
+      selectedLinkId: null,
+    });
   },
 
   saveIR: async (name) => {
@@ -356,8 +486,11 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
       shadowedRules: {},
       selectedNodeId: null,
       selectedLinkId: null,
-      activePanel: null,
+      openTabs: [],
+      activeTab: null,
       editMode: true,
+      past: [],
+      future: [],
     });
   },
 
@@ -391,4 +524,23 @@ export const useTopologyStore = create<TopologyState>((set, get) => ({
     const { run_id } = await res.json();
     return run_id as string;
   },
-}));
+  };
+    },
+    {
+      name: "netxray-topology",
+      version: 1,
+      // Persist only durable state — not transient selection/derived data.
+      partialize: (s) => ({
+        ir: s.ir,
+        nodePositions: s.nodePositions,
+        editMode: s.editMode,
+        dockWidth: s.dockWidth,
+        dockCollapsed: s.dockCollapsed,
+      }),
+      // Re-sync the simulation engine with the rehydrated topology.
+      onRehydrateStorage: () => (state) => {
+        if (state?.ir) getEngine().loadTopology(state.ir);
+      },
+    }
+  )
+);

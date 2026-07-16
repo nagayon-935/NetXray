@@ -11,7 +11,8 @@ import {
   type NodeMouseHandler,
   type EdgeMouseHandler,
   type OnConnect,
-  addEdge,
+  type Node as FlowNode,
+  type Edge as FlowEdge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -27,12 +28,7 @@ import { NetworkEdge } from "./edges/NetworkEdge";
 import { BgpEdge } from "./edges/BgpEdge";
 import { SimToolbar } from "./toolbar/SimToolbar";
 import { EditToolbar } from "./toolbar/EditToolbar";
-import { NodeDetailPanel } from "./panels/NodeDetailPanel";
-import { NodeEditPanel } from "./panels/NodeEditPanel";
-import { AclTablePanel } from "./panels/AclTablePanel";
-import { PacketSimPanel } from "./panels/PacketSimPanel";
-import { LinkDetailPanel } from "./panels/LinkDetailPanel";
-import { LabControlPanel } from "./panels/LabControlPanel";
+import { PanelDock } from "./panels/PanelDock";
 
 import { useLayerStore } from "../stores/layer-store";
 
@@ -49,18 +45,91 @@ function FitViewEffect({ trigger }: { trigger: number }) {
   return null;
 }
 
+// Pans the viewport so a newly-selected node/link isn't hidden behind the panel dock.
+// nodes/edges are kept in refs so drag-position updates don't re-trigger the effect.
+function AutoFocusEffect({
+  nodes,
+  edges,
+  selectedNodeId,
+  selectedLinkId,
+}: {
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+  selectedNodeId: string | null;
+  selectedLinkId: string | null;
+}) {
+  const { setCenter, getZoom } = useReactFlow();
+  const dockWidth = useTopologyStore((s) => s.dockWidth);
+  const dockCollapsed = useTopologyStore((s) => s.dockCollapsed);
+  const openTabsLen = useTopologyStore((s) => s.openTabs.length);
+
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+  const edgesRef = useRef(edges);
+  edgesRef.current = edges;
+
+  useEffect(() => {
+    if (!selectedNodeId && !selectedLinkId) return;
+
+    const getAbsRect = (nodeId: string): { x: number; y: number; width: number; height: number } | null => {
+      const n = nodesRef.current.find((curr) => curr.id === nodeId);
+      if (!n) return null;
+      const width = n.measured?.width || (n.style?.width as number) || 180;
+      const height = n.measured?.height || (n.style?.height as number) || 60;
+      if (!n.parentId) return { x: n.position.x, y: n.position.y, width, height };
+      const parent = getAbsRect(n.parentId);
+      if (!parent) return { x: n.position.x, y: n.position.y, width, height };
+      return { x: parent.x + n.position.x, y: parent.y + n.position.y, width, height };
+    };
+
+    let center: { x: number; y: number } | null = null;
+
+    if (selectedNodeId) {
+      const rect = getAbsRect(selectedNodeId);
+      if (rect) center = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    } else if (selectedLinkId) {
+      const edge = edgesRef.current.find(
+        (e) =>
+          (e.type === "network" || e.type === "default") &&
+          e.id.replace(/^(l\d+-)?phy-|^ospf-/, "") === selectedLinkId
+      );
+      if (edge) {
+        const src = getAbsRect(edge.source);
+        const tgt = getAbsRect(edge.target);
+        if (src && tgt) {
+          center = {
+            x: (src.x + src.width / 2 + tgt.x + tgt.width / 2) / 2,
+            y: (src.y + src.height / 2 + tgt.y + tgt.height / 2) / 2,
+          };
+        }
+      }
+    }
+
+    if (!center) return;
+
+    const occluded = openTabsLen > 0 && !dockCollapsed;
+    const zoom = getZoom();
+    const offset = occluded ? dockWidth / 2 / zoom : 0;
+    setCenter(center.x + offset, center.y, { zoom, duration: 300 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNodeId, selectedLinkId, dockWidth, dockCollapsed, openTabsLen]);
+
+  return null;
+}
+
 export function TopologyCanvas() {
   const ir = useTopologyStore((s) => s.ir);
   const packetPath = useTopologyStore((s) => s.packetPath);
   const loadIR = useTopologyStore((s) => s.loadIR);
   const selectNode = useTopologyStore((s) => s.selectNode);
   const selectLink = useTopologyStore((s) => s.selectLink);
-  const activePanel = useTopologyStore((s) => s.activePanel);
   const editMode = useTopologyStore((s) => s.editMode);
   const addNode = useTopologyStore((s) => s.addNode);
-  const addLink = useTopologyStore((s) => s.addLink);
+  const connectNodes = useTopologyStore((s) => s.connectNodes);
   const deleteNode = useTopologyStore((s) => s.deleteNode);
   const deleteLink = useTopologyStore((s) => s.deleteLink);
+  const undo = useTopologyStore((s) => s.undo);
+  const redo = useTopologyStore((s) => s.redo);
   const selectedNodeId = useTopologyStore((s) => s.selectedNodeId);
   const selectedLinkId = useTopologyStore((s) => s.selectedLinkId);
 
@@ -264,35 +333,41 @@ export function TopologyCanvas() {
     e.dataTransfer.dropEffect = "copy";
   }, []);
 
-  // Delete key handler for edit mode
+  // Keyboard handler for edit mode: delete + undo/redo
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!editMode) return;
-      if (e.key !== "Delete" && e.key !== "Backspace") return;
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        redo();
+        return;
+      }
+
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
       if (selectedNodeId) deleteNode(selectedNodeId);
       else if (selectedLinkId) deleteLink(selectedLinkId);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [editMode, selectedNodeId, selectedLinkId, deleteNode, deleteLink]);
+  }, [editMode, selectedNodeId, selectedLinkId, deleteNode, deleteLink, undo, redo]);
 
   // Drag-to-connect: create a link in edit mode
   const onConnect: OnConnect = useCallback(
     (params) => {
-      if (!editMode) return;
-      const srcNode = ir?.topology.nodes.find((n) => n.id === params.source);
-      const tgtNode = ir?.topology.nodes.find((n) => n.id === params.target);
-      if (!srcNode || !tgtNode) return;
-      const srcIfaces = Object.keys(srcNode.interfaces ?? {});
-      const tgtIfaces = Object.keys(tgtNode.interfaces ?? {});
-      const srcIface = srcIfaces[0] ?? "eth0";
-      const tgtIface = tgtIfaces[0] ?? "eth0";
-      addLink(params.source!, srcIface, params.target!, tgtIface);
-      setEdges((eds) => addEdge(params, eds));
+      if (!editMode || !params.source || !params.target) return;
+      connectNodes(params.source, params.target);
     },
-    [editMode, ir, addLink, setEdges]
+    [editMode, connectNodes]
   );
 
   const handleAddNode = useCallback(
@@ -342,6 +417,12 @@ export function TopologyCanvas() {
             connectOnClick={editMode}
           >
             <FitViewEffect trigger={fitTrigger} />
+            <AutoFocusEffect
+              nodes={nodes}
+              edges={edges}
+              selectedNodeId={selectedNodeId}
+              selectedLinkId={selectedLinkId}
+            />
             <Background gap={20} size={1} color="#e2e8f0" />
             <Controls position="bottom-left" />
             <MiniMap
@@ -359,12 +440,7 @@ export function TopologyCanvas() {
           </ReactFlowProvider>
         </div>
 
-        {activePanel === "detail" && <NodeDetailPanel />}
-        {activePanel === "edit" && <NodeEditPanel />}
-        {activePanel === "link-detail" && <LinkDetailPanel />}
-        {activePanel === "acl" && <AclTablePanel />}
-        {activePanel === "packet" && <PacketSimPanel />}
-        {activePanel === "lab" && <LabControlPanel />}
+        <PanelDock />
       </div>
     </div>
   );

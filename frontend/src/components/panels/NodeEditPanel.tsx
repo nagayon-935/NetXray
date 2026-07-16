@@ -1,6 +1,5 @@
 import { useState, useRef } from "react";
 import { useTopologyStore } from "../../stores/topology-store";
-import { PanelFrame } from "./shared/PanelFrame";
 import type { Node } from "../../types/netxray-ir";
 
 export function NodeEditPanel() {
@@ -8,7 +7,6 @@ export function NodeEditPanel() {
   const selectedNodeId = useTopologyStore((s) => s.selectedNodeId);
   const updateNode = useTopologyStore((s) => s.updateNode);
   const deleteNode = useTopologyStore((s) => s.deleteNode);
-  const closePanel = () => useTopologyStore.getState().setActivePanel(null);
 
   if (!ir || !selectedNodeId) return null;
 
@@ -16,8 +14,8 @@ export function NodeEditPanel() {
   if (!node) return null;
 
   return (
-    <PanelFrame title="Edit Node" onClose={closePanel}>
-      <div className="text-[10px] text-slate-400 font-mono -mt-2">{node.id}</div>
+    <>
+      <div className="text-[10px] text-slate-400 font-mono">{node.id}</div>
       {/* key={node.id} causes remount so child state resets when selection changes */}
       <NodeBasicEditor key={`basic-${node.id}`} node={node} updateNode={updateNode} />
       <InterfacesEditor key={`ifaces-${node.id}`} node={node} updateNode={updateNode} />
@@ -31,7 +29,7 @@ export function NodeEditPanel() {
           Delete Node
         </button>
       </div>
-    </PanelFrame>
+    </>
   );
 }
 

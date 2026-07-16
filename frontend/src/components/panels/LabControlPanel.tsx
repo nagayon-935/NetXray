@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLabStore } from "../../stores/lab-store";
 import { useLabControl } from "../../hooks/useLabControl";
-import { PanelFrame } from "./shared/PanelFrame";
-import { useTopologyStore } from "../../stores/topology-store";
 
 const STATUS_LABEL: Record<string, string> = {
   idle:       "Idle",
@@ -23,7 +21,6 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export function LabControlPanel() {
-  const closePanel = () => useTopologyStore.getState().setActivePanel(null);
   const { deploy, destroy, redeploy } = useLabControl();
 
   const status       = useLabStore((s) => s.status);
@@ -54,7 +51,7 @@ export function LabControlPanel() {
   }, [logs, showLogs]);
 
   return (
-    <PanelFrame title="Lab Control" onClose={closePanel}>
+    <>
       {/* Topology file input */}
       <div className="p-3 border-b border-slate-100 space-y-2">
         <label className="block text-[10px] text-slate-500 uppercase tracking-wide">
@@ -141,7 +138,7 @@ export function LabControlPanel() {
             : logs.join("\n")}
         </pre>
       )}
-    </PanelFrame>
+    </>
   );
 }
 

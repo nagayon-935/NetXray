@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import { COLORS } from "../lib/colors";
 
 /**
@@ -25,13 +26,18 @@ interface LayerState {
   setLayer: (layer: LayerId, visible: boolean) => void;
 }
 
-export const useLayerStore = create<LayerState>((set) => ({
-  layers: {
-    path: true,
-    labels: false,
-  },
-  toggleLayer: (layer) =>
-    set((s) => ({ layers: { ...s.layers, [layer]: !s.layers[layer] } })),
-  setLayer: (layer, visible) =>
-    set((s) => ({ layers: { ...s.layers, [layer]: visible } })),
-}));
+export const useLayerStore = create<LayerState>()(
+  persist(
+    (set) => ({
+      layers: {
+        path: true,
+        labels: false,
+      },
+      toggleLayer: (layer) =>
+        set((s) => ({ layers: { ...s.layers, [layer]: !s.layers[layer] } })),
+      setLayer: (layer, visible) =>
+        set((s) => ({ layers: { ...s.layers, [layer]: visible } })),
+    }),
+    { name: "netxray-layers" }
+  )
+);
