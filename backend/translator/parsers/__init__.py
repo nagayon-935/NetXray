@@ -1,11 +1,11 @@
-from plugins.frr.parser import FrrParser
-from plugins.arista.parser import AristaParser
-from plugins.generic_parser import GenericParser
+"""Parser dispatch table derived from the dynamic plugin registry.
 
-PARSER_REGISTRY: dict[str, type] = {
-    "frr": FrrParser,
-    "arista": AristaParser,
-    "generic": GenericParser,
-}
+``PARSER_REGISTRY`` keeps its historical name and shape (vendor → parser
+class) for existing consumers, but is now built from
+``plugins.discover_plugins()`` instead of hardcoded imports.
+"""
+from plugins import parser_registry
 
-__all__ = ["FrrParser", "AristaParser", "PARSER_REGISTRY"]
+PARSER_REGISTRY: dict[str, type] = parser_registry()
+
+__all__ = ["PARSER_REGISTRY"]
