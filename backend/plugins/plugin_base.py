@@ -1,4 +1,5 @@
-from typing import Protocol, TypedDict, Any
+from dataclasses import dataclass
+from typing import Protocol, Any
 from translator.parser_base import InterfaceData, RouteData, AclRuleData
 
 class VendorConfigGenerator(Protocol):
@@ -7,6 +8,7 @@ class VendorConfigGenerator(Protocol):
     def generate_acl_config(self, acl_name: str, rules: list[AclRuleData]) -> list[str]: ...
     def generate_bgp_config(self, bgp: dict[str, Any]) -> list[str]: ...
     def generate_full_diff(self, base_node: dict[str, Any], target_node: dict[str, Any]) -> list[str]: ...
+    def generate_startup_config(self, node: dict[str, Any]) -> str: ...
 
 class VendorDriver(Protocol):
     @classmethod
@@ -19,8 +21,13 @@ class VendorParser(Protocol):
     def parse_routes(self, raw_outputs: dict[str, str]) -> dict[str, list[RouteData]]: ...
     def parse_acls(self, raw_outputs: dict[str, str]) -> dict[str, list[AclRuleData]]: ...
 
+@dataclass(frozen=True)
 class VendorPlugin:
-    """A container for vendor-specific logic."""
+    """Immutable bundle of one vendor's driver, parser, and config generator.
+
+    Vendor packages under ``plugins/`` expose an instance named ``plugin``
+    in their ``plugin.py``; ``plugins.discover_plugins()`` picks it up.
+    """
     vendor_name: str
     driver_class: type[VendorDriver]
     parser_class: type[VendorParser]
